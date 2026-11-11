@@ -1,0 +1,3 @@
+[submodule "litellm"]
+	path = litellm
+	url = git@github.com:BerriAI/litellm.git
