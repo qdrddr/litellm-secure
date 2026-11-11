@@ -1,8 +1,9 @@
 # LiteLLM (nono-cli baked in; entrypoint wraps proxy under `nono run`).
 #
 # Run from this directory:
-#   cp .env.example .env && cp config.example.yaml config.yaml
+#   cp .env.example .env
 #   docker compose up -d --build
+# Optional custom config: cp config.example.yaml config.yaml && set LITELLM_CONFIG_PATH=./config.yaml in .env
 #
 # Optional Postgres:
 #   docker compose -f docker-compose.yml -f docker-compose.with-db.yml --profile with-db up -d
@@ -38,7 +39,7 @@ services:
         required: false
     command: ["--config", "/app/.staging/config.yaml"]
     volumes:
-      - ${LITELLM_CONFIG_PATH:-./config.yaml}:/app/config.yaml:ro
+      - ${LITELLM_CONFIG_PATH:-./config.example.yaml}:/app/config.yaml:ro
       - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/root/.config/nono/profiles/litellm.json:ro
     cap_drop:
       - ALL

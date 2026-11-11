@@ -7,19 +7,26 @@ Thin Docker overlay on [LiteLLM](https://github.com/BerriAI/litellm). The proxy 
 ```bash
 cd deployment/docker
 cp .env.example .env
-cp config.example.yaml config.yaml
-# Edit .env: LITELLM_MASTER_KEY, NONO_OPENAI_API_KEY (and other NONO_* as needed)
+# Edit .env: LITELLM_MASTER_KEY, NONO_OPENROUTER_API_KEY (and other NONO_* as needed)
 docker compose up -d --build
+```
+
+Compose mounts `config.example.yaml` by default so a fresh clone starts without `config.yaml`. For a local model list, copy the example and point compose at it:
+
+```bash
+cp config.example.yaml config.yaml   # edit model_list / router_settings
+echo 'LITELLM_CONFIG_PATH=./config.yaml' >> .env
+docker compose up -d --force-recreate litellm
 curl -sS http://localhost:4000/health/liveliness
 ```
 
-Chat completion (requires a valid `NONO_OPENAI_API_KEY`):
+Chat completion (requires a valid `NONO_OPENROUTER_API_KEY` for OpenRouter models):
 
 ```bash
 curl -sS http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}'
+  -d '{"model":"openrouter-gpt-4o-mini","messages":[{"role":"user","content":"hi"}],"stream":false}'
 ```
 
 ## Security model
