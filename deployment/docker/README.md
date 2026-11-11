@@ -33,13 +33,15 @@ curl -sS http://localhost:4000/v1/chat/completions \
 | `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL` | Set by nono for child | Phantom token + loopback `/openrouter` |
 | `LITELLM_MASTER_KEY` | Container env | Yes (proxy virtual-key auth) |
 
-Postgres (optional):
+Postgres (optional; **required for Admin UI login** — without it the UI shows `Not connected to DB!`):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.with-db.yml --profile with-db up -d
 ```
 
-Set `POSTGRES_PASSWORD`, `LITELLM_SALT_KEY`, and the other `POSTGRES_*` / `DATABASE_*` values in `.env` (see `.env.example`). Migrations run unsandboxed before `nono run` (`db` → IP for landlock). Keep `STORE_MODEL_IN_DB=False` so provider keys stay in config phantoms only.
+Set `POSTGRES_PASSWORD`, `LITELLM_SALT_KEY`, and the other `POSTGRES_*` / `DATABASE_*` values in `.env` (see `.env.example`). Changing `POSTGRES_PASSWORD` after the volume was first created does nothing — reset with `docker compose … down -v` if auth fails (`P1000`).
+
+The entrypoint forwards `db:5432` to `127.0.0.1:5432` before `nono run` so Landlock `open_port: [5432]` can reach Postgres (bridge IPs are blocked). Prisma’s query engine is pinned to `LITELLM_PRISMA_ENGINE_PORT` (default `51245`) because Landlock rejects ephemeral `bind('', 0)`. Keep `STORE_MODEL_IN_DB=False` so provider keys stay in config phantoms only.
 
 Upstream requests: LiteLLM sends the phantom key to the localhost reverse proxy; nono injects `Authorization: Bearer sk-...` (or `x-api-key`) before TLS to the real provider.
 

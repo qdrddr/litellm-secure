@@ -8,7 +8,8 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set LITELLM_SALT_KEY in .env for Postgres}
       LITELLM_MIGRATION_DIR: /tmp/litellm-migrations
       STORE_MODEL_IN_DB: "False" # keep provider keys in config os.environ/* phantoms only
-      DISABLE_SCHEMA_UPDATE: "true"
+      # Schema migrate runs unsandboxed in nono-entrypoint before `nono run`.
+      DISABLE_SCHEMA_UPDATE: "false"
     depends_on:
       db:
         condition: service_healthy
