@@ -26,6 +26,6 @@ docker compose up -d --build
 
 Canonical image tag: `v{litellm-semver}-v{nono-semver}` (e.g. `v1.106.8-v0.81.0`).
 
-- Push that git tag → [`.github/workflows/release-docker.yml`](.github/workflows/release-docker.yml) builds and pushes `bbkudk/litellm-secure:<tag>` (needs `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets).
+- Push that git tag → [`.github/workflows/release-docker.yml`](.github/workflows/release-docker.yml) builds and pushes `bbkudk/litellm-secure:<tag>`. Set `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` on the repo **build** environment (same as other `*-secure` images).
 - Local build: `./scripts/build-and-push-image.sh v1.106.8-v0.81.0`
 - Create tag: `./scripts/publish-release.sh v1.106.8-v0.81.0` (or `git tag -a v1.106.8-v0.81.0 -m '...' && git push origin v1.106.8-v0.81.0`)

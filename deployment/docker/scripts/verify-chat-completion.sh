@@ -11,8 +11,14 @@ MASTER="${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}"
 MODEL="${VERIFY_MODEL:-gpt-4o-mini}"
 STREAM="${VERIFY_STREAM:-0}"
 
+if [ "${STREAM}" = "1" ] || [ "${STREAM}" = "true" ]; then
+  stream_json=true
+else
+  stream_json=false
+fi
+
 body="$(cat <<EOF
-{"model":"${MODEL}","messages":[{"role":"user","content":"Say exactly: pong"}],"stream":${STREAM}}
+{"model":"${MODEL}","messages":[{"role":"user","content":"Say exactly: pong"}],"stream":${stream_json}}
 EOF
 )"
 
