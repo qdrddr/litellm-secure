@@ -1,0 +1,60 @@
+# LiteLLM (nono-cli baked in; entrypoint wraps proxy under `nono run`).
+#
+# Run from this directory:
+#   cp .env.example .env && cp config.example.yaml config.yaml
+#   docker compose up -d --build
+#
+# Optional Postgres:
+#   docker compose -f docker-compose.yml -f docker-compose.with-db.yml --profile with-db up -d
+#
+# Threat model: put provider secrets only in NONO_* (not OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY).
+# Do not paste provider keys into the Admin UI when using Postgres — use config os.environ/* phantoms only.
+#
+# Proxy: http://localhost:4000 (Authorization: Bearer $LITELLM_MASTER_KEY)
+
+services:
+  litellm:
+    image: ${LITELLM_IMAGE:-bbkudk/litellm-secure:v1.106.8-v0.81.0}
+    pull_policy: ${LITELLM_PULL_POLICY:-missing}
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        LITELLM_TAG: ${LITELLM_TAG:-main-stable}
+        NONO_VERSION: ${NONO_VERSION:-0.81.0}
+    container_name: litellm-secure
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    environment:
+      NONO_PROFILE: ${NONO_PROFILE:-litellm}
+      NONO_RUN_ARGS: ${NONO_RUN_ARGS:-}
+      NONO_OPENAI_API_KEY: ${NONO_OPENAI_API_KEY:-}
+      NONO_ANTHROPIC_API_KEY: ${NONO_ANTHROPIC_API_KEY:-}
+      NONO_GEMINI_API_KEY: ${NONO_GEMINI_API_KEY:-}
+      NONO_OPENROUTER_API_KEY: ${NONO_OPENROUTER_API_KEY:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+    env_file:
+      - path: .env
+        required: false
+    command: ["--config", "/app/.staging/config.yaml"]
+    volumes:
+      - ${LITELLM_CONFIG_PATH:-./config.yaml}:/app/config.yaml:ro
+      - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/root/.config/nono/profiles/litellm.json:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
+      - /app/.staging:rw,noexec,nosuid,nodev,size=16m,mode=1777
+      - /app/.cache:rw,noexec,nosuid,nodev,size=128m,mode=1777
+      - /var/run/litellm:rw,noexec,nosuid,nodev,size=8m,mode=1777
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped

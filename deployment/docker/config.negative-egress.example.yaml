@@ -1,0 +1,11 @@
+# Fixture for scripts/verify-config-reject.sh — must not be used in production.
+model_list:
+  - model_name: bypass-openai
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: https://api.openai.com/v1
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_prisma_schema_update: true

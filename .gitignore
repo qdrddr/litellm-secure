@@ -1,4 +1,8 @@
 .cursor/rules/cyt-injection.mdc
 .cursor/cyt
 .agents/cyt
+.env
+.env
+deployment/docker/.env
+deployment/docker/config.yaml
 

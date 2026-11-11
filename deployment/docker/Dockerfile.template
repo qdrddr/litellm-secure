@@ -1,0 +1,48 @@
+# Nono sandbox layer on berriai/litellm (LiteLLM unchanged).
+# Default tag updated by scripts/render-dockerfile.sh; compose/build override via build-arg.
+ARG LITELLM_TAG=main-stable
+FROM docker.litellm.ai/berriai/litellm:${LITELLM_TAG}
+
+ARG LITELLM_TAG
+ARG NONO_VERSION=0.81.0
+ARG TARGETARCH
+
+LABEL org.opencontainers.image.version="${LITELLM_TAG}-v${NONO_VERSION}"
+
+USER root
+
+RUN set -eux; \
+    apk add --no-cache wget ca-certificates; \
+    case "${TARGETARCH}" in \
+      amd64) NONO_ARCH="x86_64-unknown-linux-musl" ;; \
+      arm64) NONO_ARCH="aarch64-unknown-linux-gnu" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    wget -q -O /tmp/nono.tar.gz \
+      "https://github.com/nolabs-ai/nono/releases/download/v${NONO_VERSION}/nono-v${NONO_VERSION}-${NONO_ARCH}.tar.gz"; \
+    python3 -c "import tarfile; tarfile.open('/tmp/nono.tar.gz', 'r:gz').extractall('/tmp')"; \
+    NONO_BIN="$(find /tmp -maxdepth 2 -type f -name nono | head -1)"; \
+    test -n "${NONO_BIN}"; \
+    install -m 0755 "${NONO_BIN}" /usr/local/bin/nono; \
+    rm -rf /tmp/nono.tar.gz /tmp/nono*; \
+    apk del wget || true; \
+    rm -rf /var/cache/apk/*
+
+ENV HOME=/root
+
+RUN mkdir -p /root/.config/nono/profiles \
+  && nono pull nolabs-ai/claude
+
+COPY nono/profiles/litellm.json /root/.config/nono/profiles/litellm.json
+COPY config.example.yaml /app/config.example.yaml
+COPY nono/nono-entrypoint.sh /usr/local/bin/nono-entrypoint.sh
+RUN chmod +x /usr/local/bin/nono-entrypoint.sh
+
+WORKDIR /app
+
+EXPOSE 4000/tcp
+
+USER root
+
+ENTRYPOINT ["/usr/local/bin/nono-entrypoint.sh"]
+CMD ["litellm"]

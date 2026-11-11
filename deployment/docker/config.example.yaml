@@ -1,0 +1,38 @@
+# Example LiteLLM proxy config for nono phantom credentials.
+# Copy to config.yaml and adjust model names. Do not paste real provider keys here.
+#
+# LiteLLM reads api_key from os.environ/OPENAI_API_KEY etc. Nono sets those to phantom
+# tokens and sets OPENAI_BASE_URL / ANTHROPIC_BASE_URL to localhost reverse-proxy routes.
+# Do not set api_base to https://api.openai.com — that bypasses injection.
+
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  # Nono sets OPENROUTER_BASE_URL (not OPENROUTER_API_BASE) for the openrouter credential route.
+  - model_name: openrouter-gpt-4o-mini
+    litellm_params:
+      model: openrouter/openai/gpt-4o-mini
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: os.environ/OPENROUTER_BASE_URL
+
+litellm_settings:
+  drop_params: true
+  num_retries: 3
+  request_timeout: 600
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_prisma_schema_update: true
