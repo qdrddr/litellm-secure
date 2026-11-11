@@ -7,29 +7,27 @@ set -eu
 STAGE=/app/.staging
 CONFIG_STAGE="${STAGE}/config.yaml"
 DB_FORWARD_PID=""
+CREDENTIAL_FORWARD_PID=""
 
 mkdir -p "${STAGE}"
+
+nono_credential_proxy_enabled() {
+  case "${NONO_CREDENTIAL_PROXY:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac
+  return 1
+}
 
 cleanup() {
   if [ -n "${DB_FORWARD_PID}" ]; then
     kill "${DB_FORWARD_PID}" 2>/dev/null || true
   fi
+  if [ -n "${CREDENTIAL_FORWARD_PID}" ]; then
+    kill "${CREDENTIAL_FORWARD_PID}" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT INT TERM
 
-# Real provider keys must use NONO_* (supervisor / env:// only). Passing OPENAI_API_KEY etc. defeats injection.
-for leaked in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY OPENROUTER_API_KEY OR_API_KEY; do
-  eval "val=\${${leaked}:-}"
-  if [ -n "${val}" ]; then
-    case "${leaked}" in
-      OR_API_KEY) nono_name="NONO_OPENROUTER_API_KEY" ;;
-      OPENROUTER_API_KEY) nono_name="NONO_OPENROUTER_API_KEY" ;;
-      *) nono_name="NONO_${leaked}" ;;
-    esac
-    echo "ERROR: ${leaked} is set on the container. Use ${nono_name} instead — LiteLLM must see phantom tokens only." >&2
-    exit 1
-  fi
-done
+NONO_ENV_PY="${NONO_ENV_PY:-/usr/local/lib/litellm-secure/litellm_nono_env.py}"
+python3 "${NONO_ENV_PY}" preflight || exit 1
 
 # Rewrite the host (and optional port) in a postgres URL. Keeps user/password/path/query intact.
 rewrite_db_url_host() {
@@ -74,17 +72,18 @@ except OSError:
 PY
 }
 
-# Landlock child may only reach open_port localhost:5432 (see nono profile). Docker DNS
-# hostname `db` and bridge IPs are blocked — forward unsandboxed db → 127.0.0.1:5432.
-start_db_localhost_forward() {
-  db_host="$1"
-  db_port="$2"
-  listen_port="$3"
-  target_ip="$(resolve_host "${db_host}")" || {
-    echo "ERROR: cannot resolve DATABASE_HOST=${db_host}" >&2
+# Landlock child may only reach open_port on localhost. Docker DNS hostnames are blocked —
+# forward unsandboxed <host>:<port> → 127.0.0.1:<listen_port>.
+start_tcp_localhost_forward() {
+  label="$1"
+  remote_host="$2"
+  remote_port="$3"
+  listen_port="$4"
+  target_ip="$(resolve_host "${remote_host}")" || {
+    echo "ERROR: cannot resolve ${label} host=${remote_host}" >&2
     exit 1
   }
-  python3 - "${listen_port}" "${target_ip}" "${db_port}" <<'PY' &
+  python3 - "${listen_port}" "${target_ip}" "${remote_port}" 1>/dev/null <<'PY' &
 import socket, sys, threading
 
 listen_port = int(sys.argv[1])
@@ -126,12 +125,12 @@ srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 srv.bind(("127.0.0.1", listen_port))
 srv.listen(128)
-print(f"db-forward: 127.0.0.1:{listen_port} -> {target_host}:{target_port}", flush=True)
+print(f"tcp-forward: 127.0.0.1:{listen_port} -> {target_host}:{target_port}", file=sys.stderr, flush=True)
 while True:
     client, _ = srv.accept()
     threading.Thread(target=handle, args=(client,), daemon=True).start()
 PY
-  DB_FORWARD_PID=$!
+  _forward_pid=$!
   # Wait until the listen socket accepts connections.
   i=0
   while [ "$i" -lt 50 ]; do
@@ -153,16 +152,48 @@ PY
     sleep 0.1
   done
   if [ "$i" -ge 50 ]; then
-    echo "ERROR: localhost db forwarder on :${listen_port} did not become ready" >&2
+    echo "ERROR: localhost forwarder (${label}) on :${listen_port} did not become ready" >&2
     exit 1
   fi
+  echo "${label}-forward: 127.0.0.1:${listen_port} -> ${remote_host}:${remote_port}" >&2
+  case "${label}" in
+    db) DB_FORWARD_PID="${_forward_pid}" ;;
+    credential-proxy) CREDENTIAL_FORWARD_PID="${_forward_pid}" ;;
+  esac
 }
+
+if nono_credential_proxy_enabled; then
+  CRED_PROFILE_STAGE="${STAGE}/credentials-profile.json"
+  _cred_src=""
+  for _p in "${NONO_CREDENTIALS_PROFILE_PATH:-}" /app/credentials-sidecar-profile.json /app/.nono/credentials-profile.json; do
+    if [ -n "${_p}" ] && [ -f "${_p}" ]; then
+      _cred_src="${_p}"
+      break
+    fi
+  done
+  if [ -z "${_cred_src}" ]; then
+    echo "ERROR: sidecar credentials profile not found — mount litellm-credentials.json on litellm-secure" >&2
+    exit 1
+  fi
+  cp "${_cred_src}" "${CRED_PROFILE_STAGE}"
+  export NONO_CREDENTIALS_PROFILE_PATH="${CRED_PROFILE_STAGE}"
+  case "${NONO_K8S_SIDECAR:-}" in
+    1|true|yes|TRUE|YES) _cred_host_default=127.0.0.1 ;;
+    *) _cred_host_default=nono-proxy ;;
+  esac
+  CRED_PROXY_HOST="${NONO_CREDENTIAL_PROXY_HOST:-${_cred_host_default}}"
+  CRED_PROXY_PORT="${NONO_CREDENTIAL_PROXY_PORT:-4000}"
+  LOCAL_CRED_PORT="${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}"
+  start_tcp_localhost_forward "credential-proxy" "${CRED_PROXY_HOST}" "${CRED_PROXY_PORT}" "${LOCAL_CRED_PORT}"
+  eval "$(python3 "${NONO_ENV_PY}" emit-sidecar)"
+  echo "credential-proxy: phantoms from PHANTOM_KEY_* / profile via 127.0.0.1:${LOCAL_CRED_PORT}" >&2
+fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
   DB_HOST="${DATABASE_HOST:-db}"
   DB_PORT="${DATABASE_PORT:-5432}"
   LOCAL_DB_PORT="${NONO_LOCAL_DB_PORT:-5432}"
-  start_db_localhost_forward "${DB_HOST}" "${DB_PORT}" "${LOCAL_DB_PORT}"
+  start_tcp_localhost_forward "db" "${DB_HOST}" "${DB_PORT}" "${LOCAL_DB_PORT}"
   REWRITTEN="$(rewrite_db_url_host "${DATABASE_URL}" "127.0.0.1" "${LOCAL_DB_PORT}")"
   if [ -z "${REWRITTEN}" ]; then
     echo "ERROR: failed to rewrite DATABASE_URL for localhost forwarder" >&2
@@ -172,12 +203,19 @@ if [ -n "${DATABASE_URL:-}" ]; then
   echo "DATABASE_URL host remapped to 127.0.0.1:${LOCAL_DB_PORT} (nono open_port)" >&2
 fi
 
-if [ -n "${DATABASE_URL:-}" ] && [ -x /app/.venv/bin/python ] && [ -f /app/litellm/proxy/prisma_migration.py ]; then
+if [ -n "${DATABASE_URL:-}" ] && [ -x /app/.venv/bin/python ]; then
+  # Unsandboxed DB setup only. Do not call prisma_migration.py here — it also runs
+  # `prisma generate`, which chmods site-packages and fails under Landlock / RO venv.
   LITELLM_MIGRATION_DIR="${LITELLM_MIGRATION_DIR:-/tmp/litellm-migrations}" \
-    /app/.venv/bin/python /app/litellm/proxy/prisma_migration.py || {
+  DISABLE_SCHEMA_UPDATE="${NONO_PREFLIGHT_DISABLE_SCHEMA_UPDATE:-false}" \
+    /app/.venv/bin/python -c '
+from litellm.proxy.proxy_cli import run_server
+run_server(("--skip_server_startup",), standalone_mode=False)
+' || {
       echo "ERROR: database migration failed (unsandboxed via localhost forwarder)" >&2
       exit 1
     }
+  export DISABLE_SCHEMA_UPDATE=true
 fi
 
 # Bind mounts may not be readable under Landlock; stage config into the image tree first.

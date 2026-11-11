@@ -1,0 +1,150 @@
+# Minimal sidecar pod — edit secrets, storage, and images before apply.
+# Postgres is not included; point DATABASE_HOST at your cluster DB Service.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-nono-secrets
+type: Opaque
+stringData:
+  NONO_OPENROUTER_API_KEY: "replace-me"
+  NONO_PROXY_PASS: "replace-me-long-random"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-proxy-secrets
+type: Opaque
+stringData:
+  LITELLM_MASTER_KEY: "replace-me"
+  LITELLM_SALT_KEY: "replace-me"
+  DATABASE_URL: "postgresql://llmproxy:replace-me@postgres:5432/litellm"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-nono-credentials-profile
+data:
+  litellm-credentials.json: "{}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-nono-sandbox-profile
+data:
+  litellm-sandbox.json: "{}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-secure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm-secure
+  template:
+    metadata:
+      labels:
+        app: litellm-secure
+    spec:
+      shareProcessNamespace: false
+      containers:
+        - name: nono-proxy
+          image: ghcr.io/nolabs-ai/nono:0.81.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              exec nono proxy --listen 0.0.0.0 --port 4000
+              --pass "$NONO_PROXY_PASS"
+              --profile /profiles/litellm-credentials.json
+          env:
+            - name: NONO_PROXY_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-nono-secrets
+                  key: NONO_PROXY_PASS
+            - name: NONO_OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-nono-secrets
+                  key: NONO_OPENROUTER_API_KEY
+          volumeMounts:
+            - name: credentials-profile
+              mountPath: /profiles/litellm-credentials.json
+              subPath: litellm-credentials.json
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+
+        - name: litellm
+          image: bbkudk/litellm-secure:v1.106.8-v0.81.0
+          ports:
+            - containerPort: 4000
+              name: http
+          env:
+            - name: NONO_CREDENTIAL_PROXY
+              value: "1"
+            - name: NONO_K8S_SIDECAR
+              value: "1"
+            - name: NONO_CREDENTIAL_PROXY_HOST
+              value: "127.0.0.1"
+            - name: NONO_CREDENTIAL_PROXY_PORT
+              value: "4000"
+            - name: NONO_LOCAL_CREDENTIAL_PROXY_PORT
+              value: "18080"
+            - name: NONO_PROFILE
+              value: litellm-sandbox
+            - name: NONO_PROXY_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-nono-secrets
+                  key: NONO_PROXY_PASS
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-proxy-secrets
+                  key: LITELLM_MASTER_KEY
+            - name: LITELLM_SALT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-proxy-secrets
+                  key: LITELLM_SALT_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-proxy-secrets
+                  key: DATABASE_URL
+            - name: LITELLM_MIGRATION_DIR
+              value: /tmp/litellm-migrations
+            - name: LITELLM_PRISMA_ENGINE_PORT
+              value: "51245"
+            - name: STORE_MODEL_IN_DB
+              value: "False"
+          volumeMounts:
+            - name: sandbox-profile
+              mountPath: /root/.config/nono/profiles/litellm-sandbox.json
+              subPath: litellm-sandbox.json
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+      volumes:
+        - name: credentials-profile
+          configMap:
+            name: litellm-nono-credentials-profile
+        - name: sandbox-profile
+          configMap:
+            name: litellm-nono-sandbox-profile
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-secure
+spec:
+  selector:
+    app: litellm-secure
+  ports:
+    - port: 4000
+      targetPort: http

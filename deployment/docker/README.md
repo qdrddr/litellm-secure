@@ -7,9 +7,29 @@ Thin Docker overlay on [LiteLLM](https://github.com/BerriAI/litellm). The proxy 
 ```bash
 cd deployment/docker
 cp .env.example .env
-# Edit .env: LITELLM_MASTER_KEY, LITELLM_SALT_KEY, POSTGRES_PASSWORD, NONO_OPENROUTER_API_KEY (and other NONO_* as needed)
-docker compose up -d
+cp .env.secrets.example .env.secrets
+# Edit .env (ops + Postgres) and .env.secrets (NONO_* provider keys)
+./scripts/compose-up.sh up -d
 ```
+
+### Two nono modes (one env switch)
+
+Set `LITELLM_NONO_MODE` in `.env` (default `direct`), or export it for a one-off:
+
+| Mode | Command | Where `NONO_*` lives |
+|------|---------|------------------------|
+| **1 — Direct** | `./scripts/compose-up.sh up -d` | `litellm-secure` via `.env.secrets` (`nono run` + `litellm.json`) |
+| **2 — Sidecar** | `LITELLM_NONO_MODE=sidecar ./scripts/compose-up.sh up -d` | `nono-proxy` only (`.env.secrets`); Postgres + LiteLLM in `docker-compose.with-nono-proxy.yml` |
+
+Equivalent sidecar stack without the helper script:
+
+```bash
+docker compose -f docker-compose.with-nono-proxy.yml up -d
+```
+
+Mode 2 also needs `NONO_PROXY_PASS` in `.env`. Verify: `./scripts/verify-sidecar-keys.sh`.
+
+Kubernetes / Talos (sidecar pod, `NONO_CREDENTIAL_PROXY_HOST=127.0.0.1`): [../k8s/README.md](../k8s/README.md).
 
 Compose mounts `config.example.yaml` by default so a fresh clone starts without `config.yaml`. For a local model list, copy the example and point compose at it:
 
@@ -29,6 +49,16 @@ curl -sS http://localhost:4000/v1/chat/completions \
   -d '{"model":"openrouter-gpt-4o-mini","messages":[{"role":"user","content":"hi"}],"stream":false}'
 ```
 
+## Env conventions (no per-provider names in the image)
+
+| Prefix | Role |
+|--------|------|
+| `NONO_*` / `NONO_REAL_*` | Real keys for nono (`env://` in your credentials profile). `NONO_REAL_*` is mapped to `NONO_*` on the sidecar proxy. |
+| `PHANTOM_KEY_*` | Strip prefix → export to the sandbox child (e.g. `PHANTOM_KEY_OPENROUTER_API_KEY`). |
+| `PHANTOM_URL_*` | Strip prefix → loopback base URLs for sidecar mode. |
+
+Sidecar mode fills missing phantoms from `litellm-credentials.json` (`env_var` + route path) and `NONO_PROXY_PASS`. Provider names stay in the profile JSON you edit by hand.
+
 ## Security model
 
 | Secret | Where it lives | Seen by LiteLLM? |
@@ -42,6 +72,8 @@ curl -sS http://localhost:4000/v1/chat/completions \
 
 `docker-compose.yml` always includes Postgres (Admin UI requires it). Set `POSTGRES_PASSWORD`, `LITELLM_SALT_KEY`, and the other `POSTGRES_*` / `DATABASE_*` values in `.env` (see `.env.example`). Changing `POSTGRES_PASSWORD` after the volume was first created does nothing — reset with `docker compose down -v` if auth fails (`P1000`).
 
+**Prisma / DB schema:** The GHCR base image already includes a generated Prisma client. `DISABLE_SCHEMA_UPDATE=true` on the proxy plus `general_settings.disable_prisma_schema_update: true` in config prevent the **sandboxed** process from running `prisma generate` (it would try to chmod files under `/app/.venv`, which Landlock blocks). Migrations run **once per start** in `nono-entrypoint.sh` before `nono run`, on loopback `DATABASE_URL`. A one-time `PermissionError` on `schema.prisma` in logs is harmless after this split; if you need a full migrate on a fresh DB, temporarily set `disable_prisma_schema_update: false` in config for the first boot only.
+
 The entrypoint forwards `db:5432` to `127.0.0.1:5432` before `nono run` so Landlock `open_port: [5432]` can reach Postgres (bridge IPs are blocked). Prisma’s query engine is pinned to `LITELLM_PRISMA_ENGINE_PORT` (default `51245`) because Landlock rejects ephemeral `bind('', 0)`. Keep `STORE_MODEL_IN_DB=False` so provider keys stay in config phantoms only.
 
 Upstream requests: LiteLLM sends the phantom key to the localhost reverse proxy; nono injects `Authorization: Bearer sk-...` (or `x-api-key`) before TLS to the real provider.
@@ -50,7 +82,7 @@ Upstream requests: LiteLLM sends the phantom key to the localhost reverse proxy;
 
 **Do not** set `api_base: https://api.openai.com` in config — that bypasses nono routes. Omit `api_base` so LiteLLM uses nono-provided `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL`.
 
-Credential injection requires `nono run` with Landlock (Docker Desktop on macOS, modern Linux). `NONO_K8S_PROXY` egress-only mode is **not** used here because it does not install phantom credentials.
+Credential injection requires `nono run` with Landlock (Docker Desktop on macOS, modern Linux). Mode 2 adds a **standalone** [`nono proxy`](https://nono.sh/docs/cli/features/networking) container; LiteLLM still runs under `nono run` but without local `custom_credentials`.
 
 ## Files
 

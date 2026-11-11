@@ -41,6 +41,8 @@ RUN mkdir -p /root/.config/nono/profiles \
 COPY nono/profiles/litellm.json /root/.config/nono/profiles/litellm.json
 COPY config.example.yaml /app/config.example.yaml
 COPY nono/nono-entrypoint.sh /usr/local/bin/nono-entrypoint.sh
+RUN mkdir -p /usr/local/lib/litellm-secure /app/.nono
+COPY nono/litellm_nono_env.py /usr/local/lib/litellm-secure/litellm_nono_env.py
 # Install into venv site-packages: nono strips PYTHONPATH from the sandboxed child.
 COPY nono/sitecustomize/sitecustomize.py /tmp/litellm-secure-sitecustomize.py
 RUN chmod +x /usr/local/bin/nono-entrypoint.sh \

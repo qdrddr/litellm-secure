@@ -1,0 +1,10 @@
+# Full stack for mode 2: Postgres + litellm-secure + nono-proxy (same as base + sidecar fragment).
+#
+# Quick start (after .env + .env.secrets):
+#   docker compose -f docker-compose.with-nono-proxy.yml up -d
+# Or one env switch from this directory:
+#   LITELLM_NONO_MODE=sidecar ./scripts/compose-up.sh up -d
+
+include:
+  - docker-compose.yml
+  - docker-compose.sidecar.yml

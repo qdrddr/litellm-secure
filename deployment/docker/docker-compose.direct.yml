@@ -1,0 +1,12 @@
+# Mode 1 fragment: nono run profile + provider secrets on litellm-secure only.
+
+services:
+  litellm:
+    env_file:
+      - path: .env.secrets
+        required: false
+    environment:
+      NONO_PROFILE: ${NONO_PROFILE:-litellm}
+      NONO_RUN_ARGS: ${NONO_RUN_ARGS:-}
+    volumes:
+      - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/root/.config/nono/profiles/litellm.json:ro

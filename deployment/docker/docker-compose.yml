@@ -1,9 +1,10 @@
 # LiteLLM + Postgres (nono-cli baked in; entrypoint wraps proxy under `nono run`).
 #
 # Run from this directory:
-#   cp .env.example .env
-#   # set LITELLM_MASTER_KEY, LITELLM_SALT_KEY, POSTGRES_PASSWORD, NONO_* as needed
-#   docker compose up -d
+#   cp .env.example .env && cp .env.secrets.example .env.secrets
+#   # set keys; then:
+#   ./scripts/compose-up.sh up -d                    # mode 1 (default)
+#   LITELLM_NONO_MODE=sidecar ./scripts/compose-up.sh up -d   # mode 2
 # Optional custom config: cp config.example.yaml config.yaml && set LITELLM_CONFIG_PATH=./config.yaml in .env
 #
 # Build image first: ../../scripts/build-local-image.sh vX.Y.Z-vA.B.C
@@ -29,12 +30,6 @@ services:
     ports:
       - "${LITELLM_PORT:-4000}:4000"
     environment:
-      NONO_PROFILE: ${NONO_PROFILE:-litellm}
-      NONO_RUN_ARGS: ${NONO_RUN_ARGS:-}
-      NONO_OPENAI_API_KEY: ${NONO_OPENAI_API_KEY:-}
-      NONO_ANTHROPIC_API_KEY: ${NONO_ANTHROPIC_API_KEY:-}
-      NONO_GEMINI_API_KEY: ${NONO_GEMINI_API_KEY:-}
-      NONO_OPENROUTER_API_KEY: ${NONO_OPENROUTER_API_KEY:-}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
       DATABASE_URL: postgresql://${POSTGRES_USER:-llmproxy}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@${DATABASE_HOST:-db}:${DATABASE_PORT:-5432}/${POSTGRES_DB:-litellm}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set LITELLM_SALT_KEY in .env}
@@ -42,14 +37,14 @@ services:
       # Prisma query engine must bind a fixed port (nono listen_port/open_port); sitecustomize.py reads this.
       LITELLM_PRISMA_ENGINE_PORT: ${LITELLM_PRISMA_ENGINE_PORT:-51245}
       STORE_MODEL_IN_DB: "False"
-      DISABLE_SCHEMA_UPDATE: "false"
+      # Migrations run unsandboxed in nono-entrypoint.sh; sandboxed proxy must not run prisma generate (Landlock + read-only venv).
+      DISABLE_SCHEMA_UPDATE: "true"
     env_file:
       - path: .env
         required: false
     command: ["--config", "/app/.staging/config.yaml"]
     volumes:
       - ${LITELLM_CONFIG_PATH:-./config.example.yaml}:/app/config.yaml:ro
-      - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/root/.config/nono/profiles/litellm.json:ro
     depends_on:
       db:
         condition: service_healthy

@@ -4,5 +4,6 @@
 .env
 .env
 deployment/docker/.env
+deployment/docker/.env.secrets
 deployment/docker/config.yaml
-
+__pycache__/
