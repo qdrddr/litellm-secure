@@ -7,8 +7,8 @@ Thin Docker overlay on [LiteLLM](https://github.com/BerriAI/litellm). The proxy 
 ```bash
 cd deployment/docker
 cp .env.example .env
-# Edit .env: LITELLM_MASTER_KEY, NONO_OPENROUTER_API_KEY (and other NONO_* as needed)
-docker compose up -d --build
+# Edit .env: LITELLM_MASTER_KEY, LITELLM_SALT_KEY, POSTGRES_PASSWORD, NONO_OPENROUTER_API_KEY (and other NONO_* as needed)
+docker compose up -d
 ```
 
 Compose mounts `config.example.yaml` by default so a fresh clone starts without `config.yaml`. For a local model list, copy the example and point compose at it:
@@ -40,13 +40,7 @@ curl -sS http://localhost:4000/v1/chat/completions \
 | `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL` | Set by nono for child | Phantom token + loopback `/openrouter` |
 | `LITELLM_MASTER_KEY` | Container env | Yes (proxy virtual-key auth) |
 
-Postgres (optional; **required for Admin UI login** — without it the UI shows `Not connected to DB!`):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.with-db.yml --profile with-db up -d
-```
-
-Set `POSTGRES_PASSWORD`, `LITELLM_SALT_KEY`, and the other `POSTGRES_*` / `DATABASE_*` values in `.env` (see `.env.example`). Changing `POSTGRES_PASSWORD` after the volume was first created does nothing — reset with `docker compose … down -v` if auth fails (`P1000`).
+`docker-compose.yml` always includes Postgres (Admin UI requires it). Set `POSTGRES_PASSWORD`, `LITELLM_SALT_KEY`, and the other `POSTGRES_*` / `DATABASE_*` values in `.env` (see `.env.example`). Changing `POSTGRES_PASSWORD` after the volume was first created does nothing — reset with `docker compose down -v` if auth fails (`P1000`).
 
 The entrypoint forwards `db:5432` to `127.0.0.1:5432` before `nono run` so Landlock `open_port: [5432]` can reach Postgres (bridge IPs are blocked). Prisma’s query engine is pinned to `LITELLM_PRISMA_ENGINE_PORT` (default `51245`) because Landlock rejects ephemeral `bind('', 0)`. Keep `STORE_MODEL_IN_DB=False` so provider keys stay in config phantoms only.
 
@@ -60,7 +54,7 @@ Credential injection requires `nono run` with Landlock (Docker Desktop on macOS,
 
 ## Files
 
-- `Dockerfile.template` — install nono on `docker.litellm.ai/berriai/litellm`
+- `Dockerfile.template` — nono overlay on `ghcr.io/berriai/litellm-non_root` (semver from canonical git tag)
 - `nono/nono-entrypoint.sh` — stage config, `exec nono run`
 - `nono/profiles/litellm.json` — filesystem allowlist + `custom_credentials` for OpenAI / Anthropic / Gemini
 - `config.example.yaml` — models referencing `os.environ/*` phantoms
@@ -79,3 +73,12 @@ VERIFY_STREAM=1 ./scripts/verify-chat-completion.sh
 ```
 
 Release tags: `v{litellm}-v{nono}` — `./scripts/publish-release.sh` + `scripts/build-and-push-image.sh`.
+
+Build the image locally (pulls `ghcr.io/berriai/litellm-non_root:v1.106.8` for tag `v1.106.8-v0.81.0`):
+
+```bash
+../../scripts/build-local-image.sh v1.106.8-v0.81.0
+LITELLM_IMAGE=litellm-secure:local docker compose up -d
+```
+
+Optional submodule compile: `LITELLM_BUILD_FROM_SOURCE=1 ../../scripts/build-local-image.sh v1.106.8-v0.81.0`

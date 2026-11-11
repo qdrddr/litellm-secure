@@ -1,17 +1,18 @@
-# LiteLLM (nono-cli baked in; entrypoint wraps proxy under `nono run`).
+# LiteLLM + Postgres (nono-cli baked in; entrypoint wraps proxy under `nono run`).
 #
 # Run from this directory:
 #   cp .env.example .env
-#   docker compose up -d --build
+#   # set LITELLM_MASTER_KEY, LITELLM_SALT_KEY, POSTGRES_PASSWORD, NONO_* as needed
+#   docker compose up -d
 # Optional custom config: cp config.example.yaml config.yaml && set LITELLM_CONFIG_PATH=./config.yaml in .env
 #
-# Optional Postgres:
-#   docker compose -f docker-compose.yml -f docker-compose.with-db.yml --profile with-db up -d
+# Build image first: ../../scripts/build-local-image.sh vX.Y.Z-vA.B.C
 #
 # Threat model: put provider secrets only in NONO_* (not OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY).
-# Do not paste provider keys into the Admin UI when using Postgres — use config os.environ/* phantoms only.
+# Do not paste provider keys into the Admin UI — use config os.environ/* phantoms only.
 #
-# Proxy: http://localhost:4000 (Authorization: Bearer $LITELLM_MASTER_KEY)
+# Proxy: http://localhost:4000 (Admin UI login: user admin, password LITELLM_MASTER_KEY)
+# Authorization: Bearer $LITELLM_MASTER_KEY
 
 services:
   litellm:
@@ -21,7 +22,8 @@ services:
       context: .
       dockerfile: Dockerfile.template
       args:
-        LITELLM_TAG: ${LITELLM_TAG:-main-stable}
+        LITELLM_BASE_IMAGE: ${LITELLM_BASE_IMAGE:-ghcr.io/berriai/litellm-non_root:${LITELLM_RELEASE_TAG:-v1.106.8}}
+        LITELLM_RELEASE_TAG: ${LITELLM_RELEASE_TAG:-v1.106.8}
         NONO_VERSION: ${NONO_VERSION:-0.81.0}
     container_name: litellm-secure
     ports:
@@ -34,6 +36,13 @@ services:
       NONO_GEMINI_API_KEY: ${NONO_GEMINI_API_KEY:-}
       NONO_OPENROUTER_API_KEY: ${NONO_OPENROUTER_API_KEY:-}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-llmproxy}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@${DATABASE_HOST:-db}:${DATABASE_PORT:-5432}/${POSTGRES_DB:-litellm}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set LITELLM_SALT_KEY in .env}
+      LITELLM_MIGRATION_DIR: /tmp/litellm-migrations
+      # Prisma query engine must bind a fixed port (nono listen_port/open_port); sitecustomize.py reads this.
+      LITELLM_PRISMA_ENGINE_PORT: ${LITELLM_PRISMA_ENGINE_PORT:-51245}
+      STORE_MODEL_IN_DB: "False"
+      DISABLE_SCHEMA_UPDATE: "false"
     env_file:
       - path: .env
         required: false
@@ -41,6 +50,9 @@ services:
     volumes:
       - ${LITELLM_CONFIG_PATH:-./config.example.yaml}:/app/config.yaml:ro
       - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/root/.config/nono/profiles/litellm.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
     cap_drop:
       - ALL
     security_opt:
@@ -59,3 +71,27 @@ services:
       retries: 5
       start_period: 120s
     restart: unless-stopped
+
+  db:
+    image: postgres:16
+    restart: always
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-litellm}
+      POSTGRES_USER: ${POSTGRES_USER:-llmproxy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -d "$$POSTGRES_DB" -U "$$POSTGRES_USER"
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres_data:
+    name: litellm_secure_postgres_data

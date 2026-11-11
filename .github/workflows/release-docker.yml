@@ -51,9 +51,14 @@ jobs:
           if [[ -z "$LITELLM_TAG" ]]; then
             LITELLM_TAG="${BASE_TAG}"
           fi
+          if [[ -z "${LITELLM_RELEASE_TAG}" || "${LITELLM_RELEASE_TAG}" == unknown ]]; then
+            echo "LITELLM_RELEASE_TAG is not set after parse_release_tag" >&2
+            exit 1
+          fi
           {
             echo "ref=${REF}"
             echo "base_tag=${BASE_TAG}"
+            echo "litellm_release_tag=${LITELLM_RELEASE_TAG}"
             echo "nono_version=${NONO_VERSION}"
             echo "docker_tag=${DOCKER_TAG}"
             echo "litellm_tag=${LITELLM_TAG}"
@@ -77,7 +82,7 @@ jobs:
       - name: Build and push
         env:
           DOCKER_IMAGE: bbkudk/litellm-secure
-          LITELLM_TAG: ${{ steps.meta.outputs.litellm_tag }}
+          LITELLM_RELEASE_TAG: ${{ steps.meta.outputs.litellm_release_tag }}
           NONO_VERSION: ${{ steps.meta.outputs.nono_version }}
           DOCKER_PLATFORMS: linux/amd64,linux/arm64
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}

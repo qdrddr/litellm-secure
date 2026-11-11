@@ -1,13 +1,18 @@
-# Nono sandbox layer on berriai/litellm (LiteLLM unchanged).
-# Default tag updated by scripts/render-dockerfile.sh; compose/build override via build-arg.
-ARG LITELLM_TAG=main-stable
-FROM docker.litellm.ai/berriai/litellm:${LITELLM_TAG}
+# Nono sandbox on official LiteLLM non_root (default ghcr.io/berriai/litellm-non_root:vX.Y.Z).
+# scripts/build-*-image.sh set LITELLM_BASE_IMAGE from the canonical git tag (v1.106.8-v0.81.0 → v1.106.8).
+ARG LITELLM_BASE_IMAGE=ghcr.io/berriai/litellm-non_root:v1.106.8
+FROM ${LITELLM_BASE_IMAGE}
 
-ARG LITELLM_TAG
+# Required: pass --build-arg LITELLM_RELEASE_TAG=vX.Y.Z (scripts/build-*-image.sh set this from the canonical tag).
+ARG LITELLM_RELEASE_TAG
 ARG NONO_VERSION=0.81.0
 ARG TARGETARCH
 
-LABEL org.opencontainers.image.version="${LITELLM_TAG}-v${NONO_VERSION}"
+RUN test -n "${LITELLM_RELEASE_TAG}" && [ "${LITELLM_RELEASE_TAG}" != unknown ]
+
+ENV LITELLM_RELEASE_TAG=${LITELLM_RELEASE_TAG}
+
+LABEL org.opencontainers.image.version="${LITELLM_RELEASE_TAG}-v${NONO_VERSION}"
 
 USER root
 

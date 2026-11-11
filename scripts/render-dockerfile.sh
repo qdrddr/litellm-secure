@@ -3,19 +3,21 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $(basename "$0") <litellm-image-tag>" >&2
-  echo "  Example: $(basename "$0") v1.80.0" >&2
-  echo "  Hub tags often look like main-stable — pass the literal tag you build from." >&2
+  echo "Usage: $(basename "$0") <litellm-base-image-ref> [nono-version]" >&2
+  echo "  Example: $(basename "$0") litellm-secure-base:local 0.81.0" >&2
+  echo "  Default base: ghcr.io/berriai/litellm-non_root:<LITELLM_RELEASE_TAG> (see scripts/build-local-image.sh)" >&2
 }
 
-if [[ $# -ne 1 ]]; then
+if [[ $# -lt 1 ]]; then
   usage
   exit 1
 fi
 
-TAG="$1"
-if [[ ! "$TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "Refusing unsafe tag: ${TAG}" >&2
+BASE_IMAGE="$1"
+NONO_VERSION="${2:-0.81.0}"
+
+if [[ "$BASE_IMAGE" == *$'\n'* || "$BASE_IMAGE" == *$'\r'* ]]; then
+  echo "Refusing unsafe base image ref" >&2
   exit 1
 fi
 
@@ -28,11 +30,9 @@ if [[ ! -f "$TEMPLATE" ]]; then
   exit 1
 fi
 
-if ! grep -q '^ARG LITELLM_TAG=' "$TEMPLATE"; then
-  echo "Template missing ARG LITELLM_TAG= line: ${TEMPLATE}" >&2
-  exit 1
-fi
+sed \
+  -e "s|^ARG LITELLM_BASE_IMAGE=.*|ARG LITELLM_BASE_IMAGE=${BASE_IMAGE}|" \
+  -e "s|^ARG NONO_VERSION=.*|ARG NONO_VERSION=${NONO_VERSION}|" \
+  "$TEMPLATE" >"$OUT"
 
-sed "s/^ARG LITELLM_TAG=.*/ARG LITELLM_TAG=${TAG}/" "$TEMPLATE" >"$OUT"
-
-echo "Rendered ${OUT} (docker.litellm.ai/berriai/litellm:${TAG})"
+echo "Rendered ${OUT} (FROM ${BASE_IMAGE}, nono ${NONO_VERSION})"

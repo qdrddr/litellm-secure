@@ -213,16 +213,19 @@ if [ "$has_config" = false ]; then
   set -- "$@" --config "${CONFIG_STAGE}"
 fi
 
-LITELLM_CMD="litellm"
-COMPONENT_ENTRYPOINT=/app/docker/component_entrypoint.sh
-if [ ! -f "${COMPONENT_ENTRYPOINT}" ] && [ -f /app/docker-entrypoint.sh ]; then
-  # Submodule / dev image with multi-component entrypoint.
-  COMPONENT_ENTRYPOINT=/app/docker-entrypoint.sh
-  LITELLM_CMD="proxy"
-fi
-
 # Do not exec: keep this shell as parent so the unsandboxed db forwarder survives.
 # NONO_RUN_ARGS: optional extra nono run flags before "--" (word-split; unset or empty = no extra flags).
 # shellcheck disable=SC2086
-nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
-  sh "${COMPONENT_ENTRYPOINT}" "${LITELLM_CMD}" "$@"
+if [ -f /app/docker/prod_entrypoint.sh ]; then
+  nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
+    sh /app/docker/prod_entrypoint.sh "$@"
+elif [ -f /app/docker/component_entrypoint.sh ]; then
+  nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
+    sh /app/docker/component_entrypoint.sh litellm "$@"
+elif [ -f /app/docker-entrypoint.sh ]; then
+  nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
+    sh /app/docker-entrypoint.sh proxy "$@"
+else
+  echo "ERROR: no LiteLLM entrypoint found under /app/docker" >&2
+  exit 1
+fi

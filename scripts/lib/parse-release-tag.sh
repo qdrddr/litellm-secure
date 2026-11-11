@@ -23,7 +23,8 @@ canonical_release_tag() {
   NONO_VERSION="$nono"
   DOCKER_TAG="${BASE_TAG}-v${NONO_VERSION}"
   GIT_TAG="$DOCKER_TAG"
-  export BASE_TAG NONO_VERSION GIT_TAG DOCKER_TAG
+  LITELLM_RELEASE_TAG="$BASE_TAG"
+  export BASE_TAG NONO_VERSION GIT_TAG DOCKER_TAG LITELLM_RELEASE_TAG
 }
 
 parse_release_tag() {
@@ -34,7 +35,8 @@ parse_release_tag() {
     NONO_VERSION="${BASH_REMATCH[2]}"
     GIT_TAG="$ref"
     DOCKER_TAG="$ref"
-    export BASE_TAG NONO_VERSION GIT_TAG DOCKER_TAG
+    LITELLM_RELEASE_TAG="$BASE_TAG"
+    export BASE_TAG NONO_VERSION GIT_TAG DOCKER_TAG LITELLM_RELEASE_TAG
     return 0
   fi
 
@@ -50,7 +52,25 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   fi
   parse_release_tag "$1"
   printf 'BASE_TAG=%s\n' "$BASE_TAG"
+  printf 'LITELLM_RELEASE_TAG=%s\n' "$LITELLM_RELEASE_TAG"
   printf 'NONO_VERSION=%s\n' "$NONO_VERSION"
   printf 'GIT_TAG=%s\n' "$GIT_TAG"
   printf 'DOCKER_TAG=%s\n' "$DOCKER_TAG"
 fi
+
+# Requires parse_release_tag / canonical_release_tag to have run.
+litellm_ghcr_base_image() {
+  require_litellm_release_tag
+  echo "ghcr.io/berriai/litellm-non_root:${LITELLM_RELEASE_TAG}"
+}
+
+require_litellm_release_tag() {
+  if [[ -z "${LITELLM_RELEASE_TAG:-}" ]] || [[ "${LITELLM_RELEASE_TAG}" == unknown ]]; then
+    echo "LITELLM_RELEASE_TAG must be set (pass a canonical release tag, e.g. v1.106.8-v0.81.0)." >&2
+    exit 1
+  fi
+  if [[ ! "${LITELLM_RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Invalid LITELLM_RELEASE_TAG: ${LITELLM_RELEASE_TAG} (expected vX.Y.Z)." >&2
+    exit 1
+  fi
+}
