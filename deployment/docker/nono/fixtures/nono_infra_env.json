@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "description": "NONO_* variables for litellm-secure ops and nono runtime — not SBX_REAL provider secrets."
+  },
+  "env_vars": [
+    "NONO_PROFILE",
+    "NONO_RUN_ARGS",
+    "NONO_CREDENTIAL_PROXY",
+    "NONO_CREDENTIAL_PROXY_HOST",
+    "NONO_CREDENTIAL_PROXY_PORT",
+    "NONO_LOCAL_CREDENTIAL_PROXY_PORT",
+    "NONO_LOCAL_DB_PORT",
+    "NONO_K8S_SIDECAR",
+    "NONO_K8S_PROXY",
+    "NONO_PROXY_PORT",
+    "NONO_REDIS_UPSTREAM_HOST",
+    "NONO_REDIS_UPSTREAM_PORT",
+    "NONO_DB_UPSTREAM_HOST",
+    "NONO_PROXY_PASS",
+    "NONO_PROXY_TOKEN",
+    "NONO_CREDENTIALS_PROFILE_PATH",
+    "NONO_VERSION"
+  ]
+}

@@ -53,6 +53,7 @@ services:
       - ./nono/nono-entrypoint.sh:/usr/local/bin/nono-entrypoint.sh:ro
       - ./nono/pgbouncer_supervisor.py:/usr/local/lib/litellm-secure/pgbouncer_supervisor.py:ro
       - ./nono/litellm_nono_env.py:/usr/local/lib/litellm-secure/litellm_nono_env.py:ro
+      - ./nono/fixtures:/usr/local/lib/litellm-secure/fixtures:ro
     depends_on:
       db:
         condition: service_healthy

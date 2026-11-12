@@ -9,66 +9,77 @@ import shlex
 import sys
 from pathlib import Path
 
-NONO_INFRA = frozenset(
-    {
-        "NONO_PROFILE",
-        "NONO_RUN_ARGS",
-        "NONO_CREDENTIAL_PROXY",
-        "NONO_CREDENTIAL_PROXY_HOST",
-        "NONO_CREDENTIAL_PROXY_PORT",
-        "NONO_LOCAL_CREDENTIAL_PROXY_PORT",
-        "NONO_LOCAL_DB_PORT",
-        "NONO_K8S_SIDECAR",
-        "NONO_K8S_PROXY",
-        "NONO_PROXY_PORT",
-        "NONO_REDIS_UPSTREAM_HOST",
-        "NONO_REDIS_UPSTREAM_PORT",
-        "NONO_DB_UPSTREAM_HOST",
-        "NONO_PROXY_PASS",
-        "NONO_PROXY_TOKEN",
-        "NONO_CREDENTIALS_PROFILE_PATH",
-        "NONO_VERSION",
-    }
-)
+_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
-# LiteLLM / container ops — not provider credentials.
-_ENV_ALLOWLIST_EXACT = frozenset(
-    {
-        "DATABASE_URL",
-        "DATABASE_HOST",
-        "DATABASE_PORT",
-        "POSTGRES_DB",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD",
-        "PATH",
-        "HOME",
-        "HOSTNAME",
-        "LANG",
-        "TZ",
-        "PWD",
-        "SHLVL",
-        "PORT",
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "NO_PROXY",
-        "SSL_CERT_FILE",
-        "PYTHONPATH",
-        "VIRTUAL_ENV",
-        "UVICORN_WORKERS",
-    }
-)
 
-_ENV_ALLOWLIST_PREFIXES = (
-    "LITELLM_",
-    "STORE_",
-    "DISABLE_",
-    "PHANTOM_KEY_",
-    "PHANTOM_URL_",
-    "GPG_",
-    "CI",
-    "DEBIAN_",
-    "PWD",
-)
+def _resolve_fixture(filename: str, env_override: str) -> Path:
+    override = os.environ.get(env_override, "").strip()
+    return Path(override) if override else _FIXTURES_DIR / filename
+
+
+def _read_fixture_json(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"ERROR: cannot read env fixture {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(data, dict):
+        print(f"ERROR: env fixture {path} must be a JSON object", file=sys.stderr)
+        sys.exit(1)
+    return data
+
+
+def load_nono_infra_env(path: Path | None = None) -> frozenset[str]:
+    """NONO_* ops/runtime names — fixtures/nono_infra_env.json."""
+    fixture = path or _resolve_fixture("nono_infra_env.json", "LITELLM_NONO_INFRA_FIXTURE")
+    raw = _read_fixture_json(fixture)
+    names = raw.get("env_vars")
+    if not isinstance(names, list) or not names:
+        print(f"ERROR: {fixture} must contain a non-empty env_vars array", file=sys.stderr)
+        sys.exit(1)
+    for name in names:
+        if not isinstance(name, str) or not name.startswith("NONO_"):
+            print(f"ERROR: invalid NONO infra env name in {fixture}: {name!r}", file=sys.stderr)
+            sys.exit(1)
+    return frozenset(names)
+
+
+def load_container_env_allowlist(
+    path: Path | None = None,
+) -> tuple[frozenset[str], tuple[str, ...]]:
+    """Exact + prefix ops allowlists — fixtures/litellm_container_env_allowlist.json."""
+    fixture = path or _resolve_fixture(
+        "litellm_container_env_allowlist.json",
+        "LITELLM_CONTAINER_ENV_ALLOWLIST_FIXTURE",
+    )
+    raw = _read_fixture_json(fixture)
+    exact = raw.get("allowlist_exact")
+    prefixes = raw.get("allowlist_prefixes")
+    if not isinstance(exact, list) or not exact:
+        print(f"ERROR: {fixture} must contain a non-empty allowlist_exact array", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(prefixes, list) or not prefixes:
+        print(
+            f"ERROR: {fixture} must contain a non-empty allowlist_prefixes array",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for name in exact:
+        if not isinstance(name, str) or not name:
+            print(f"ERROR: invalid allowlist_exact entry in {fixture}: {name!r}", file=sys.stderr)
+            sys.exit(1)
+    for prefix in prefixes:
+        if not isinstance(prefix, str) or not prefix:
+            print(
+                f"ERROR: invalid allowlist_prefixes entry in {fixture}: {prefix!r}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    return frozenset(exact), tuple(prefixes)
+
+
+NONO_INFRA = load_nono_infra_env()
+_ENV_ALLOWLIST_EXACT, _ENV_ALLOWLIST_PREFIXES = load_container_env_allowlist()
 
 
 def looks_like_real_provider_key(value: str) -> bool:

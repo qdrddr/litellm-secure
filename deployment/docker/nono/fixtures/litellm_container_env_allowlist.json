@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "description": "Container env names treated as LiteLLM/proxy ops (preflight: not upstream provider secrets)."
+  },
+  "allowlist_exact": [
+    "DATABASE_URL",
+    "DATABASE_HOST",
+    "DATABASE_PORT",
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "PATH",
+    "HOME",
+    "HOSTNAME",
+    "LANG",
+    "TZ",
+    "PWD",
+    "SHLVL",
+    "PORT",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_FILE",
+    "PYTHONPATH",
+    "VIRTUAL_ENV",
+    "UVICORN_WORKERS"
+  ],
+  "allowlist_prefixes": [
+    "LITELLM_",
+    "STORE_",
+    "DISABLE_",
+    "PHANTOM_KEY_",
+    "PHANTOM_URL_",
+    "GPG_",
+    "CI",
+    "DEBIAN_",
+    "PWD"
+  ]
+}
