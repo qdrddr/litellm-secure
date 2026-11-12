@@ -292,10 +292,17 @@ REDIS_UPSTREAM_HOST="${NONO_REDIS_UPSTREAM_HOST:-${REDIS_HOST:-}}"
 REDIS_UPSTREAM_PORT="${NONO_REDIS_UPSTREAM_PORT:-${REDIS_PORT:-${ep_defaults_redis_port}}}"
 LOCAL_REDIS_PORT="${NONO_LOCAL_REDIS_PORT:-${ep_defaults_local_redis_port}}"
 if [ -n "${REDIS_UPSTREAM_HOST}" ]; then
-  start_tcp_localhost_forward "redis" "${REDIS_UPSTREAM_HOST}" "${REDIS_UPSTREAM_PORT}" "${LOCAL_REDIS_PORT}"
-  export REDIS_HOST="127.0.0.1"
-  export REDIS_PORT="${LOCAL_REDIS_PORT}"
-  echo "REDIS remapped to 127.0.0.1:${LOCAL_REDIS_PORT} (nono open_port)" >&2
+  if nono_k8s_proxy_enabled; then
+    # Workers are not under nono run; direct Valkey keeps Redis pub/sub (auth-cache invalidation) alive.
+    export REDIS_HOST="${REDIS_UPSTREAM_HOST}"
+    export REDIS_PORT="${REDIS_UPSTREAM_PORT}"
+    echo "REDIS direct ${REDIS_HOST}:${REDIS_PORT} (NONO_K8S_PROXY; no loopback forward)" >&2
+  else
+    start_tcp_localhost_forward "redis" "${REDIS_UPSTREAM_HOST}" "${REDIS_UPSTREAM_PORT}" "${LOCAL_REDIS_PORT}"
+    export REDIS_HOST="127.0.0.1"
+    export REDIS_PORT="${LOCAL_REDIS_PORT}"
+    echo "REDIS remapped to 127.0.0.1:${LOCAL_REDIS_PORT} (nono open_port)" >&2
+  fi
 fi
 
 if [ -n "${DATABASE_URL:-}" ] && [ -x /app/.venv/bin/python ]; then
