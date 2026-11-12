@@ -33,3 +33,5 @@ litellm_settings:
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   disable_prisma_schema_update: true
+  # Clients hit :4000 directly (Compose publish); empty list silences login_throttle WARN.
+  trusted_proxy_ranges: []

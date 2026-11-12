@@ -78,6 +78,10 @@ The entrypoint forwards `db:5432` to `127.0.0.1:5432` before `nono run` so Landl
 
 **In-container PgBouncer** (`LITELLM_PGBOUNCER_ENABLED`, default `true`): LiteLLM’s built-in pooler listens on loopback `:6432`. It cannot run inside the Landlock sandbox (`evdns` / SIGSEGV), so `nono-entrypoint.sh` starts `pgbouncer_supervisor.py` **unsandboxed** (like the DB TCP forwarder), rewrites `DATABASE_URL` to `?pgbouncer=true`, and sets `LITELLM_PGBOUNCER_ENABLED=false` on the sandboxed proxy so it does not start a second pooler. Nono profiles allow `open_port: 6432` for the worker → pooler hop. CI: `./scripts/verify-pgbouncer.sh`.
 
+**Nono `PATH entry sandbox-writable`:** `/app/.venv` was `filesystem.allow` (rw) while `.venv/bin` is first on `PATH`. Profiles now use `filesystem.read` for `/app/.venv`, `/app/litellm`, `/app/docker`, and `/opt/prisma` so only intentional writable dirs stay on `allow`.
+
+**Log audit in e2e:** `./scripts/audit-container-logs.sh` tails litellm (and sidecar proxy) logs and fails on fatal startup patterns. Benign noise includes Prisma wolfi→debian warnings and failed sandboxed `migrate diff` (migrations already ran unsandboxed in the entrypoint).
+
 Upstream requests: LiteLLM sends the phantom key to the localhost reverse proxy; nono injects `Authorization: Bearer sk-...` (or `x-api-key`) before TLS to the real provider.
 
 **Do not** paste provider keys into the Admin UI or enable DB-stored credentials with real keys — they are decrypted inside the sandbox. Use `config.yaml` with `os.environ/OPENAI_API_KEY` and keep `STORE_MODEL_IN_DB=False` unless you extend the design.

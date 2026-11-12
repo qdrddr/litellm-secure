@@ -13,6 +13,7 @@ services:
       - path: .env.secrets
         required: true
     environment:
+      HOME: /tmp
       NONO_PROXY_PASS: ${NONO_PROXY_PASS:?set NONO_PROXY_PASS in .env for sidecar proxy auth}
       NONO_PROXY_LISTEN_PORT: ${NONO_PROXY_LISTEN_PORT:-4010}
     volumes:

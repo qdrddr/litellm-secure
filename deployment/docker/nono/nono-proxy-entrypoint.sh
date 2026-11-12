@@ -2,6 +2,9 @@
 # Sidecar credential proxy: map NONO_REAL_* → NONO_* (no Python — stock nono image is minimal).
 set -eu
 
+export HOME="${NONO_PROXY_HOME:-/tmp}"
+mkdir -p "${HOME}/.local/state/nono" 2>/dev/null || true
+
 # Must differ from LiteLLM (4000); required when nono-proxy and litellm share a pod network (K8s).
 PORT="${NONO_PROXY_LISTEN_PORT:-4010}"
 
