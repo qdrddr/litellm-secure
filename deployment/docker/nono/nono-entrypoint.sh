@@ -9,7 +9,7 @@ CONFIG_STAGE="${STAGE}/config.yaml"
 DB_FORWARD_PID=""
 CREDENTIAL_FORWARD_PID=""
 
-mkdir -p "${STAGE}"
+mkdir -p "${STAGE}" /app/.local/state/nono 2>/dev/null || true
 
 nono_credential_proxy_enabled() {
   case "${NONO_CREDENTIAL_PROXY:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac

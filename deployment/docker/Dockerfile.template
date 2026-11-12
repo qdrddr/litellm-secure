@@ -51,8 +51,9 @@ RUN chmod +x /usr/local/bin/nono-entrypoint.sh \
   && SITE="$(/app/.venv/bin/python -c 'import site; print(site.getsitepackages()[0])')" \
   && install -m 0644 /tmp/litellm-secure-sitecustomize.py "${SITE}/sitecustomize.py" \
   && rm -f /tmp/litellm-secure-sitecustomize.py \
+  && mkdir -p /app/.local/state/nono \
   && chown -R "${LITELLM_RUNTIME_UID}:${LITELLM_RUNTIME_GID}" \
-    /app/.config/nono /app/.nono /usr/local/lib/litellm-secure
+    /app/.config/nono /app/.nono /usr/local/lib/litellm-secure /app/.local/state
 
 # Pin Prisma query-engine port (sitecustomize.py + nono listen_port/open_port 51245).
 ENV LITELLM_PRISMA_ENGINE_PORT=51245

@@ -56,6 +56,7 @@ services:
       - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
       - /app/.staging:rw,noexec,nosuid,nodev,size=16m,mode=1777
       - /app/.cache:rw,noexec,nosuid,nodev,size=128m,mode=1777
+      - /app/.local/state/nono:rw,noexec,nosuid,nodev,size=64m,mode=1777
       - /var/run/litellm:rw,noexec,nosuid,nodev,size=8m,mode=1777
     healthcheck:
       test:
