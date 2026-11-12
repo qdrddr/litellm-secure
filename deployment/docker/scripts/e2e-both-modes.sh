@@ -52,6 +52,7 @@ test_mode() {
   LITELLM_NONO_MODE="${mode}" ./scripts/compose-up.sh up -d --force-recreate
   wait_healthy
   ./scripts/smoke-health.sh
+  ./scripts/verify-pgbouncer.sh
   admin_login
   if [ "${mode}" = sidecar ]; then
     ./scripts/verify-sidecar-keys.sh

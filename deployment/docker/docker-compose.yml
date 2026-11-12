@@ -40,6 +40,10 @@ services:
       STORE_MODEL_IN_DB: "False"
       # Migrations run unsandboxed in nono-entrypoint.sh; sandboxed proxy must not run prisma generate (Landlock + read-only venv).
       DISABLE_SCHEMA_UPDATE: "true"
+      # In-container PgBouncer (loopback :6432); migrations use direct URL before the pooler starts in proxy_cli.
+      LITELLM_PGBOUNCER_ENABLED: ${LITELLM_PGBOUNCER_ENABLED:-true}
+      LITELLM_PGBOUNCER_PORT: ${LITELLM_PGBOUNCER_PORT:-6432}
+      LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS: ${LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS:-10}
     env_file:
       - path: .env
         required: false
