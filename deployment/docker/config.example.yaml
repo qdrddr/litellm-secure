@@ -35,3 +35,4 @@ general_settings:
   disable_prisma_schema_update: true
   # Clients hit :4000 directly (Compose publish); empty list silences login_throttle WARN.
   trusted_proxy_ranges: []
+  disable_env_credential_login: true
