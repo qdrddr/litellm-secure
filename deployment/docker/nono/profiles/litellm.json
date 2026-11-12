@@ -13,13 +13,15 @@
       "/app/.claude",
       "/app/.local/state/claude",
       "/app/.config/nono",
-      "/app/.venv",
-      "/app/litellm",
-      "/app/docker",
       "/tmp",
       "/var/lib/litellm",
       "/var/run/litellm",
-      "/run/litellm",
+      "/run/litellm"
+    ],
+    "read": [
+      "/app/.venv",
+      "/app/litellm",
+      "/app/docker",
       "/opt/prisma"
     ]
   },

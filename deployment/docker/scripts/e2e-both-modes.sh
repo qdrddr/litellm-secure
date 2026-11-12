@@ -58,6 +58,7 @@ test_mode() {
     ./scripts/verify-sidecar-keys.sh
   fi
   chat_completion
+  ./scripts/audit-container-logs.sh
 }
 
 test_mode direct
