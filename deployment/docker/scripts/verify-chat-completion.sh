@@ -29,7 +29,7 @@ if [ "${STREAM}" = "1" ] || [ "${STREAM}" = "true" ]; then
     -H "Content-Type: application/json" \
     -d "${body}" | head -c 500
   echo ""
-  echo "OK: streaming response received (requires valid NONO_OPENAI_API_KEY)"
+  echo "OK: streaming response received (requires valid SBX_REAL_* upstream key)"
 else
   resp="$(curl -sS "${BASE}/v1/chat/completions" \
     -H "Authorization: Bearer ${MASTER}" \
@@ -40,7 +40,7 @@ else
   if echo "${resp}" | grep -q '"choices"'; then
     echo "OK: chat completion succeeded"
   elif echo "${resp}" | grep -qi 'invalid_api_key\|authentication\|401'; then
-    echo "WARN: upstream rejected key — check NONO_OPENAI_API_KEY (proxy still routed request)" >&2
+    echo "WARN: upstream rejected key — check SBX_REAL_* in .env.secrets (proxy still routed request)" >&2
     exit 0
   else
     echo "FAIL: unexpected response" >&2

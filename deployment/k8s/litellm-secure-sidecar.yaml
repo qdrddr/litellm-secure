@@ -7,7 +7,7 @@ metadata:
   name: litellm-nono-secrets
 type: Opaque
 stringData:
-  NONO_OPENROUTER_API_KEY: "replace-me"
+  SBX_REAL_OPENROUTER_API_KEY: "replace-me"
   NONO_PROXY_PASS: "replace-me-long-random"
 ---
 apiVersion: v1
@@ -64,11 +64,11 @@ spec:
                 secretKeyRef:
                   name: litellm-nono-secrets
                   key: NONO_PROXY_PASS
-            - name: NONO_OPENROUTER_API_KEY
+            - name: SBX_REAL_OPENROUTER_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: litellm-nono-secrets
-                  key: NONO_OPENROUTER_API_KEY
+                  key: SBX_REAL_OPENROUTER_API_KEY
           volumeMounts:
             - name: credentials-profile
               mountPath: /profiles/litellm-credentials.json

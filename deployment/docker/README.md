@@ -8,7 +8,7 @@ Thin Docker overlay on [LiteLLM](https://github.com/BerriAI/litellm). The proxy 
 cd deployment/docker
 cp .env.example .env
 cp .env.secrets.example .env.secrets
-# Edit .env (ops + Postgres) and .env.secrets (NONO_* provider keys)
+# Edit .env (ops + Postgres) and .env.secrets (SBX_REAL_* provider keys)
 ./scripts/compose-up.sh up -d
 ```
 
@@ -16,8 +16,8 @@ cp .env.secrets.example .env.secrets
 
 Set `LITELLM_NONO_MODE` in `.env` (default `direct`), or export it for a one-off:
 
-| Mode | Command | Where `NONO_*` lives |
-|------|---------|------------------------|
+| Mode | Command | Where `SBX_REAL_*` lives |
+|------|---------|---------------------------|
 | **1 — Direct** | `./scripts/compose-up.sh up -d` | `litellm-secure` via `.env.secrets` (`nono run` + `litellm.json`) |
 | **2 — Sidecar** | `LITELLM_NONO_MODE=sidecar ./scripts/compose-up.sh up -d` | `nono-proxy` only (`.env.secrets`); Postgres + LiteLLM in `docker-compose.with-nono-proxy.yml` |
 
@@ -40,7 +40,7 @@ docker compose up -d --force-recreate litellm
 curl -sS http://localhost:4000/health/liveliness
 ```
 
-Chat completion (requires a valid `NONO_OPENROUTER_API_KEY` for OpenRouter models):
+Chat completion (requires a valid `SBX_REAL_OPENROUTER_API_KEY` for OpenRouter models):
 
 ```bash
 curl -sS http://localhost:4000/v1/chat/completions \
@@ -53,7 +53,7 @@ curl -sS http://localhost:4000/v1/chat/completions \
 
 | Prefix | Role |
 |--------|------|
-| `NONO_*` / `NONO_REAL_*` | Real keys for nono (`env://` in your credentials profile). `NONO_REAL_*` is mapped to `NONO_*` on the sidecar proxy. |
+| `SBX_REAL_*` | Real LLM keys for nono (`env://` in credentials profiles). `NONO_*` remains nono tooling only (proxy pass, profile name, etc.). |
 | `PHANTOM_KEY_*` | Strip prefix → export to the sandbox child (e.g. `PHANTOM_KEY_OPENROUTER_API_KEY`). |
 | `PHANTOM_URL_*` | Strip prefix → loopback base URLs for sidecar mode. |
 
@@ -63,10 +63,10 @@ Sidecar mode fills missing phantoms from `litellm-credentials.json` (`env_var` +
 
 | Secret | Where it lives | Seen by LiteLLM? |
 |--------|----------------|------------------|
-| `NONO_OPENAI_API_KEY` (etc.) | Container env (supervisor) | No — resolved by nono via `env://` |
+| `SBX_REAL_OPENAI_API_KEY` (etc.) | Container env (supervisor only) | No — `litellm.json` `environment.deny_vars` strips `SBX_REAL_*` from the sandboxed child; nono still reads `env://` upstream |
 | `OPENAI_API_KEY` | Set by nono for the child | Phantom token only |
 | `OPENAI_BASE_URL` | Set by nono | `http://127.0.0.1:PORT/openai` |
-| `NONO_OPENROUTER_API_KEY` | Container env (supervisor) | No — same pattern as other providers |
+| `SBX_REAL_OPENROUTER_API_KEY` | Container env (supervisor or sidecar proxy) | No — same pattern as other providers |
 | `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL` | Set by nono for child | Phantom token + loopback `/openrouter` |
 | `LITELLM_MASTER_KEY` | Container env | Yes (proxy virtual-key auth) |
 
@@ -105,9 +105,9 @@ See [scripts/README.md](scripts/README.md). Quick path:
 
 ```bash
 ./scripts/smoke-health.sh
-./scripts/verify-phantom-env.sh
+./scripts/verify-direct-keys.sh
 ./scripts/verify-config-reject.sh
-# With a real NONO_OPENAI_API_KEY:
+# With a real SBX_REAL_* key in .env.secrets:
 ./scripts/verify-chat-completion.sh
 VERIFY_STREAM=1 ./scripts/verify-chat-completion.sh
 ```

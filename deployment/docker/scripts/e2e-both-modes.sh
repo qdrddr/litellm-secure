@@ -54,7 +54,9 @@ test_mode() {
   ./scripts/smoke-health.sh
   ./scripts/verify-pgbouncer.sh
   admin_login
-  if [ "${mode}" = sidecar ]; then
+  if [ "${mode}" = direct ]; then
+    ./scripts/verify-direct-keys.sh
+  else
     ./scripts/verify-sidecar-keys.sh
   fi
   chat_completion

@@ -1,5 +1,5 @@
 # Mode 2 fragment: merge with docker-compose.yml (see scripts/compose-up.sh or docker-compose.with-nono-proxy.yml).
-# Provider secrets: .env.secrets on nono-proxy only (NONO_* or NONO_REAL_*); litellm must not load .env.secrets.
+# Provider secrets: .env.secrets on nono-proxy only (SBX_REAL_*); litellm must not load .env.secrets.
 
 services:
   nono-proxy:

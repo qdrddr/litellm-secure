@@ -5,6 +5,9 @@
     "version": "1.0.0",
     "description": "LiteLLM under nono run without local custom_credentials; provider traffic via localhost forward to nono-proxy sidecar."
   },
+  "environment": {
+    "deny_vars": ["SBX_REAL_*"]
+  },
   "filesystem": {
     "allow": [
       "/app/.staging",

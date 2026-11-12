@@ -8,7 +8,7 @@ Pattern follows [CLIProxyAPI-secure](https://github.com/qdrddr/CLIProxyAPI-secur
 
 | Mode | Guide | Summary |
 |------|--------|---------|
-| **Direct** | [DIRECT.md](DIRECT.md) | One container: `nono run` + `NONO_`* on litellm-secure |
+| **Direct** | [DIRECT.md](DIRECT.md) | One container: `nono run` + `SBX_REAL_*` on litellm-secure (supervisor only) |
 | **Sidecar** | [NONO-SIDECAR.md](NONO-SIDECAR.md) | `nono-proxy` + litellm-secure; secrets only on the proxy |
 
 From `deployment/docker`: `cp .env.example .env`, `cp .env.secrets.example .env.secrets`, then `./scripts/compose-up.sh up -d` (or `LITELLM_NONO_MODE=sidecar` for sidecar). See [deployment/docker/README.md](deployment/docker/README.md) for compose, security model, and verification scripts.

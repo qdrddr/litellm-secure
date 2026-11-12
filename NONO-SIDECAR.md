@@ -1,6 +1,6 @@
 # Mode 2 — Nono sidecar (`nono proxy`)
 
-Two containers: **`nono-proxy`** holds real **`NONO_*`** credentials and runs `nono proxy` on port **4010** (not 4000 — LiteLLM owns **4000**); **`litellm-secure`** runs under `nono run` with [`litellm-sandbox.json`](deployment/docker/nono/profiles/litellm-sandbox.json) only — **no provider secrets** on the LiteLLM container.
+Two containers: **`nono-proxy`** holds real **`SBX_REAL_*`** credentials and runs `nono proxy` on port **4010** (not 4000 — LiteLLM owns **4000**); **`litellm-secure`** runs under `nono run` with [`litellm-sandbox.json`](deployment/docker/nono/profiles/litellm-sandbox.json) only — **no provider secrets** on the LiteLLM container.
 
 **Best for:** stricter separation (keys never on the app container), Kubernetes/Talos ([deployment/k8s/README.md](deployment/k8s/README.md)), or when you want the same pattern as [CLIProxyAPI-secure](https://github.com/qdrddr/CLIProxyAPI-secure).
 

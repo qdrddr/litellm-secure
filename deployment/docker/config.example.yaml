@@ -12,7 +12,7 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: os.environ/OPENROUTER_BASE_URL
 
-  # Optional OpenAI / Anthropic / Gemini (set matching NONO_* in .env):
+  # Optional OpenAI / Anthropic / Gemini (set matching SBX_REAL_* in .env.secrets):
   # - model_name: gpt-4o-mini
   #   litellm_params:
   #     model: openai/gpt-4o-mini

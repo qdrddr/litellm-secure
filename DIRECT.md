@@ -1,6 +1,6 @@
 # Mode 1 — Direct (`nono run`)
 
-One container runs LiteLLM under **`nono run`**. Real provider keys live in **supervisor env** (`NONO_*` or `NONO_REAL_*` in `.env.secrets`); the sandboxed LiteLLM process only sees **phantom** keys and loopback `*_BASE_URL` from the [`litellm.json`](deployment/docker/nono/profiles/litellm.json) profile.
+One container runs LiteLLM under **`nono run`**. Real provider keys live in **supervisor env** as **`SBX_REAL_*`** in `.env.secrets` (not `NONO_*`, which is reserved for nono itself); the sandboxed LiteLLM process only sees **phantom** keys and loopback `*_BASE_URL` from the [`litellm.json`](deployment/docker/nono/profiles/litellm.json) profile.
 
 **Best for:** local Docker on macOS/Linux where Landlock works in a single container (simplest compose).
 
@@ -11,7 +11,7 @@ cd deployment/docker
 cp .env.example .env
 cp .env.secrets.example .env.secrets
 # Edit .env: LITELLM_MASTER_KEY, LITELLM_SALT_KEY, POSTGRES_PASSWORD, NONO_PROXY_PASS (unused in direct)
-# Edit .env.secrets: NONO_OPENROUTER_API_KEY (and other NONO_* as needed)
+# Edit .env.secrets: SBX_REAL_OPENROUTER_API_KEY (and other SBX_REAL_* as needed)
 ```
 
 Optional: `cp config.example.yaml config.yaml` and set `LITELLM_CONFIG_PATH=./config.yaml` in `.env`.
@@ -54,6 +54,7 @@ curl -sS http://localhost:4000/v1/chat/completions \
 
 ```bash
 ./scripts/smoke-health.sh
+./scripts/verify-direct-keys.sh
 VERIFY_MODEL=openrouter/deep-seek-v4-flash-0731 ./scripts/verify-chat-completion.sh
 ```
 
@@ -61,7 +62,7 @@ Both modes: `LITELLM_IMAGE=bbkudk/litellm-secure:v1.106.8-v0.81.0 ./scripts/e2e-
 
 ## Env conventions
 
-- **`NONO_*` / `NONO_REAL_*` in `.env.secrets`** — real keys for `env://` in the nono profile (add providers in [`litellm.json`](deployment/docker/nono/profiles/litellm.json) by hand).
+- **`SBX_REAL_*` in `.env.secrets`** — real keys for `env://` in the nono profile (add providers in [`litellm.json`](deployment/docker/nono/profiles/litellm.json) by hand).
 - **`PHANTOM_KEY_*` / `PHANTOM_URL_*`** — optional overrides; usually not needed in direct mode.
 
 More detail: [deployment/docker/README.md](deployment/docker/README.md).

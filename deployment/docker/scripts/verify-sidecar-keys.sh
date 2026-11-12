@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sidecar mode: litellm child must not have NONO_* / NONO_REAL_* secrets; loopback BASE_URL from profile.
+# Sidecar mode: litellm child must not have SBX_REAL_* secrets; loopback BASE_URL from profile.
 set -euo pipefail
 
 LITELLM_CONTAINER="${LITELLM_CONTAINER:-litellm-secure}"
@@ -13,21 +13,21 @@ if [ -z "$(docker inspect -f '{{.State.Running}}' "${LITELLM_CONTAINER}" 2>/dev/
 fi
 
 docker exec "${LITELLM_CONTAINER}" python3 "${ENV_PY}" preflight
-echo "OK: litellm preflight (no NONO_* / NONO_REAL_* provider secrets)"
+echo "OK: litellm preflight (no SBX_REAL_* on litellm-secure)"
 
 has_proxy_secret=false
 while IFS= read -r line; do
   case "${line}" in
-    NONO_*=*|NONO_REAL_*=*)
+    SBX_REAL_*=*)
       has_proxy_secret=true
       echo "OK: ${line%%=*} present on ${PROXY_CONTAINER}"
       break
       ;;
   esac
-done < <(docker exec "${PROXY_CONTAINER}" env | grep -E '^(NONO_|NONO_REAL_)' || true)
+done < <(docker exec "${PROXY_CONTAINER}" env | grep -E '^SBX_REAL_' || true)
 
 if [ "${has_proxy_secret}" = false ]; then
-  echo "WARN: no NONO_* / NONO_REAL_* on ${PROXY_CONTAINER}" >&2
+  echo "WARN: no SBX_REAL_* on ${PROXY_CONTAINER}" >&2
 fi
 
 pid="$(docker exec "${LITELLM_CONTAINER}" sh -c "pgrep -f 'litellm --config' | head -1" || true)"

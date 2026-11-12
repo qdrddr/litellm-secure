@@ -9,7 +9,7 @@
 #
 # Build image first: ../../scripts/build-local-image.sh vX.Y.Z-vA.B.C
 #
-# Threat model: put provider secrets only in NONO_* (not OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY).
+# Threat model: put provider secrets only in SBX_REAL_* (not OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY).
 # Do not paste provider keys into the Admin UI — use config os.environ/* phantoms only.
 #
 # Proxy: http://localhost:4000 (Admin UI login: user admin, password LITELLM_MASTER_KEY)
@@ -52,6 +52,7 @@ services:
       - ${LITELLM_CONFIG_PATH:-./config.example.yaml}:/app/config.yaml:ro
       - ./nono/nono-entrypoint.sh:/usr/local/bin/nono-entrypoint.sh:ro
       - ./nono/pgbouncer_supervisor.py:/usr/local/lib/litellm-secure/pgbouncer_supervisor.py:ro
+      - ./nono/litellm_nono_env.py:/usr/local/lib/litellm-secure/litellm_nono_env.py:ro
     depends_on:
       db:
         condition: service_healthy

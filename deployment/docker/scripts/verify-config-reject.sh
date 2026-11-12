@@ -12,7 +12,7 @@ fi
 
 out="$(docker run --rm \
   -e LITELLM_MASTER_KEY=sk-test-master-key-for-reject-check \
-  -e NONO_OPENAI_API_KEY=sk-fake \
+  -e SBX_REAL_OPENAI_API_KEY=sk-fake \
   -v "${FIXTURE}:/app/config.yaml:ro" \
   --entrypoint /usr/local/bin/nono-entrypoint.sh \
   "${IMAGE}" \
