@@ -119,6 +119,12 @@ spec:
                 secretKeyRef:
                   name: litellm-proxy-secrets
                   key: DATABASE_URL
+            - name: LITELLM_PGBOUNCER_ENABLED
+              value: "true"
+            - name: LITELLM_PGBOUNCER_PORT
+              value: "6432"
+            - name: LITELLM_PGBOUNCER_MAX_DB_CONNECTIONS
+              value: "10"
             - name: LITELLM_MIGRATION_DIR
               value: /tmp/litellm-migrations
             - name: LITELLM_PRISMA_ENGINE_PORT

@@ -76,6 +76,8 @@ Sidecar mode fills missing phantoms from `litellm-credentials.json` (`env_var` +
 
 The entrypoint forwards `db:5432` to `127.0.0.1:5432` before `nono run` so Landlock `open_port: [5432]` can reach Postgres (bridge IPs are blocked). Prisma’s query engine is pinned to `LITELLM_PRISMA_ENGINE_PORT` (default `51245`) because Landlock rejects ephemeral `bind('', 0)`. Keep `STORE_MODEL_IN_DB=False` so provider keys stay in config phantoms only.
 
+**In-container PgBouncer** (`LITELLM_PGBOUNCER_ENABLED`, default `true`): LiteLLM’s built-in pooler listens on loopback `:6432`. It cannot run inside the Landlock sandbox (`evdns` / SIGSEGV), so `nono-entrypoint.sh` starts `pgbouncer_supervisor.py` **unsandboxed** (like the DB TCP forwarder), rewrites `DATABASE_URL` to `?pgbouncer=true`, and sets `LITELLM_PGBOUNCER_ENABLED=false` on the sandboxed proxy so it does not start a second pooler. Nono profiles allow `open_port: 6432` for the worker → pooler hop. CI: `./scripts/verify-pgbouncer.sh`.
+
 Upstream requests: LiteLLM sends the phantom key to the localhost reverse proxy; nono injects `Authorization: Bearer sk-...` (or `x-api-key`) before TLS to the real provider.
 
 **Do not** paste provider keys into the Admin UI or enable DB-stored credentials with real keys — they are decrypted inside the sandbox. Use `config.yaml` with `os.environ/OPENAI_API_KEY` and keep `STORE_MODEL_IN_DB=False` unless you extend the design.
