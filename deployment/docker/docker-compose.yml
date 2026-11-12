@@ -30,6 +30,7 @@ services:
     ports:
       - "${LITELLM_PORT:-4000}:4000"
     environment:
+      LITELLM_DISABLE_NO_REDIS_WARNING: "true"
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
       DATABASE_URL: postgresql://${POSTGRES_USER:-llmproxy}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@${DATABASE_HOST:-db}:${DATABASE_PORT:-5432}/${POSTGRES_DB:-litellm}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set LITELLM_SALT_KEY in .env}
@@ -56,7 +57,7 @@ services:
       - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
       - /app/.staging:rw,noexec,nosuid,nodev,size=16m,mode=1777
       - /app/.cache:rw,noexec,nosuid,nodev,size=128m,mode=1777
-      - /app/.local/state/nono:rw,noexec,nosuid,nodev,size=64m,mode=1777
+      - /app/.local/state/nono:uid=65534,gid=65534,mode=0700,size=64m,noexec,nosuid,nodev
       - /var/run/litellm:rw,noexec,nosuid,nodev,size=8m,mode=1777
     healthcheck:
       test:

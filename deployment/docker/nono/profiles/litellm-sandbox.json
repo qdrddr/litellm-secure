@@ -9,6 +9,9 @@
     "allow": [
       "/app/.staging",
       "/app/.cache",
+      "/app/.cache/claude",
+      "/app/.claude",
+      "/app/.local/state/claude",
       "/app/.config/nono",
       "/app/.venv",
       "/app/litellm",
@@ -17,8 +20,7 @@
       "/var/lib/litellm",
       "/var/run/litellm",
       "/run/litellm",
-      "/opt/prisma",
-      "/app/.nono"
+      "/opt/prisma"
     ]
   },
   "network": {

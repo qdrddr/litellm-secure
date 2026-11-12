@@ -14,17 +14,19 @@ services:
         required: true
     environment:
       NONO_PROXY_PASS: ${NONO_PROXY_PASS:?set NONO_PROXY_PASS in .env for sidecar proxy auth}
-      NONO_PROXY_LISTEN_PORT: ${NONO_PROXY_LISTEN_PORT:-4000}
+      NONO_PROXY_LISTEN_PORT: ${NONO_PROXY_LISTEN_PORT:-4010}
     volumes:
       - ./nono/profiles/litellm-credentials.json:/profiles/litellm-credentials.json:ro
       - ./nono/litellm_nono_env.py:/nono/litellm_nono_env.py:ro
       - ./nono/nono-proxy-entrypoint.sh:/nono/nono-proxy-entrypoint.sh:ro
+    ports:
+      - "${NONO_PROXY_PUBLISH_PORT:-4010}:${NONO_PROXY_LISTEN_PORT:-4010}"
     expose:
-      - "4000"
+      - "${NONO_PROXY_LISTEN_PORT:-4010}"
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q -O- "http://127.0.0.1:${NONO_PROXY_LISTEN_PORT:-4000}/" >/dev/null 2>&1 || wget -q --spider "http://127.0.0.1:${NONO_PROXY_LISTEN_PORT:-4000}/" 2>/dev/null || exit 0
+        - wget -q -O- "http://127.0.0.1:${NONO_PROXY_LISTEN_PORT:-4010}/" >/dev/null 2>&1 || wget -q --spider "http://127.0.0.1:${NONO_PROXY_LISTEN_PORT:-4010}/" 2>/dev/null || exit 0
       interval: 10s
       timeout: 5s
       retries: 6
@@ -45,7 +47,7 @@ services:
     environment:
       NONO_CREDENTIAL_PROXY: "1"
       NONO_CREDENTIAL_PROXY_HOST: ${NONO_CREDENTIAL_PROXY_HOST:-nono-proxy}
-      NONO_CREDENTIAL_PROXY_PORT: ${NONO_CREDENTIAL_PROXY_PORT:-4000}
+      NONO_CREDENTIAL_PROXY_PORT: ${NONO_CREDENTIAL_PROXY_PORT:-4010}
       NONO_LOCAL_CREDENTIAL_PROXY_PORT: ${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}
       NONO_CREDENTIALS_PROFILE_PATH: /app/credentials-sidecar-profile.json
       NONO_PROFILE: litellm-sandbox

@@ -9,6 +9,9 @@
     "allow": [
       "/app/.staging",
       "/app/.cache",
+      "/app/.cache/claude",
+      "/app/.claude",
+      "/app/.local/state/claude",
       "/app/.config/nono",
       "/app/.venv",
       "/app/litellm",

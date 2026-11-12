@@ -55,7 +55,7 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - >-
-              exec nono proxy --listen 0.0.0.0 --port 4000
+              exec nono proxy --listen 0.0.0.0 --port 4010
               --pass "$NONO_PROXY_PASS"
               --profile /profiles/litellm-credentials.json
           env:
@@ -74,6 +74,9 @@ spec:
               mountPath: /profiles/litellm-credentials.json
               subPath: litellm-credentials.json
               readOnly: true
+          ports:
+            - containerPort: 4010
+              name: cred-proxy
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -91,7 +94,7 @@ spec:
             - name: NONO_CREDENTIAL_PROXY_HOST
               value: "127.0.0.1"
             - name: NONO_CREDENTIAL_PROXY_PORT
-              value: "4000"
+              value: "4010"
             - name: NONO_LOCAL_CREDENTIAL_PROXY_PORT
               value: "18080"
             - name: NONO_PROFILE

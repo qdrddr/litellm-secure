@@ -5,7 +5,7 @@ set -euo pipefail
 LITELLM_CONTAINER="${LITELLM_CONTAINER:-litellm-secure}"
 PROXY_CONTAINER="${NONO_PROXY_CONTAINER:-litellm-nono-proxy}"
 ENV_PY="/usr/local/lib/litellm-secure/litellm_nono_env.py"
-PROFILE_PATH="/app/.nono/credentials-profile.json"
+PROFILE_PATH="${NONO_CREDENTIALS_PROFILE_PATH:-/app/credentials-sidecar-profile.json}"
 
 if [ -z "$(docker inspect -f '{{.State.Running}}' "${LITELLM_CONTAINER}" 2>/dev/null || true)" ]; then
   echo "ERROR: ${LITELLM_CONTAINER} is not running" >&2

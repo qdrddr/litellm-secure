@@ -9,7 +9,16 @@ CONFIG_STAGE="${STAGE}/config.yaml"
 DB_FORWARD_PID=""
 CREDENTIAL_FORWARD_PID=""
 
-mkdir -p "${STAGE}" /app/.local/state/nono 2>/dev/null || true
+# nolabs-ai/claude before-hook needs parents present before nono resolves capabilities (HOME=/app).
+_litellm_uid="$(id -u)"
+mkdir -p \
+  "${STAGE}" \
+  /app/.local/state/nono \
+  /app/.local/state/claude/locks \
+  /app/.claude/tmp "/app/.claude/tmp/claude-${_litellm_uid}" \
+  /app/.cache/claude 2>/dev/null || true
+chmod 700 /app/.claude /app/.claude/tmp 2>/dev/null || true
+export TMPDIR="${TMPDIR:-/app/.claude/tmp}"
 
 nono_credential_proxy_enabled() {
   case "${NONO_CREDENTIAL_PROXY:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac
@@ -182,7 +191,7 @@ if nono_credential_proxy_enabled; then
     *) _cred_host_default=nono-proxy ;;
   esac
   CRED_PROXY_HOST="${NONO_CREDENTIAL_PROXY_HOST:-${_cred_host_default}}"
-  CRED_PROXY_PORT="${NONO_CREDENTIAL_PROXY_PORT:-4000}"
+  CRED_PROXY_PORT="${NONO_CREDENTIAL_PROXY_PORT:-4010}"
   LOCAL_CRED_PORT="${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}"
   start_tcp_localhost_forward "credential-proxy" "${CRED_PROXY_HOST}" "${CRED_PROXY_PORT}" "${LOCAL_CRED_PORT}"
   eval "$(python3 "${NONO_ENV_PY}" emit-sidecar)"

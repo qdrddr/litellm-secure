@@ -4,7 +4,7 @@ Same threat model as [deployment/docker](../docker/README.md): **real provider k
 
 ## Recommended: sidecar pod (mode 2)
 
-Matches `docker-compose.with-nono-proxy.yml`. Two containers share the pod network namespace; litellm talks to credential proxy on loopback.
+Matches `docker-compose.with-nono-proxy.yml`. Two containers share the pod network namespace (one IP); **nono proxy listens on 4010**, LiteLLM on **4000** — both can bind in the same pod/namespace.
 
 | Container | Image | Secrets |
 |-----------|--------|---------|
@@ -16,7 +16,7 @@ Environment on **litellm-secure** (Talos / strict nodes):
 ```yaml
 NONO_CREDENTIAL_PROXY: "1"
 NONO_CREDENTIAL_PROXY_HOST: "127.0.0.1"
-NONO_CREDENTIAL_PROXY_PORT: "4000"
+NONO_CREDENTIAL_PROXY_PORT: "4010"
 NONO_LOCAL_CREDENTIAL_PROXY_PORT: "18080"
 NONO_PROFILE: litellm-sandbox
 NONO_PROXY_PASS: "<same as nono-proxy --pass>"
@@ -25,7 +25,7 @@ NONO_PROXY_PASS: "<same as nono-proxy --pass>"
 **nono-proxy** container (same pod):
 
 ```text
-nono proxy --listen 0.0.0.0 --port 4000 --pass "$NONO_PROXY_PASS" --profile /profiles/litellm-credentials.json
+nono proxy --listen 0.0.0.0 --port 4010 --pass "$NONO_PROXY_PASS" --profile /profiles/litellm-credentials.json
 ```
 
 Mount `deployment/docker/nono/profiles/litellm-credentials.json`. Put `NONO_*` in a Kubernetes Secret and inject only into `nono-proxy`.

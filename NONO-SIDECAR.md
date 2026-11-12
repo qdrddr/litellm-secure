@@ -1,6 +1,6 @@
 # Mode 2 — Nono sidecar (`nono proxy`)
 
-Two containers: **`nono-proxy`** holds real **`NONO_*`** credentials and runs `nono proxy` on port **4000**; **`litellm-secure`** runs under `nono run` with [`litellm-sandbox.json`](deployment/docker/nono/profiles/litellm-sandbox.json) only — **no provider secrets** on the LiteLLM container.
+Two containers: **`nono-proxy`** holds real **`NONO_*`** credentials and runs `nono proxy` on port **4010** (not 4000 — LiteLLM owns **4000**); **`litellm-secure`** runs under `nono run` with [`litellm-sandbox.json`](deployment/docker/nono/profiles/litellm-sandbox.json) only — **no provider secrets** on the LiteLLM container.
 
 **Best for:** stricter separation (keys never on the app container), Kubernetes/Talos ([deployment/k8s/README.md](deployment/k8s/README.md)), or when you want the same pattern as [CLIProxyAPI-secure](https://github.com/qdrddr/CLIProxyAPI-secure).
 
@@ -40,14 +40,14 @@ Stack: **Postgres** + **litellm-nono-proxy** + **litellm-secure**.
 ## How it works (short)
 
 1. `nono-proxy` injects real credentials upstream.
-2. Entrypoint TCP-forwards `nono-proxy:4000` → `127.0.0.1:18080` inside litellm (Landlock `open_port`).
+2. Entrypoint TCP-forwards `nono-proxy:4010` (Compose) or `127.0.0.1:4010` (K8s same pod) → `127.0.0.1:18080` inside litellm (Landlock `open_port`).
 3. Phantoms for LiteLLM come from `PHANTOM_KEY_*` / `PHANTOM_URL_*` or defaults from the credentials profile + `NONO_PROXY_PASS`.
 
 ## Use
 
 | Item | Value |
 |------|--------|
-| LiteLLM API / UI | `http://localhost:4000` (published on **litellm-secure**, not the sidecar) |
+| LiteLLM API / UI | `http://localhost:4000` (**litellm-secure**); credential proxy (debug) `http://localhost:4010` (**nono-proxy**) |
 | Auth header | `Authorization: Bearer $LITELLM_MASTER_KEY` |
 | Admin UI | http://localhost:4000/ui — user **`admin`**, password **`LITELLM_MASTER_KEY`** |
 
