@@ -82,6 +82,8 @@ The entrypoint forwards `db:5432` to `127.0.0.1:5432` before `nono run` so Landl
 
 **Log audit in e2e:** `./scripts/audit-container-logs.sh` tails litellm (and sidecar proxy) logs and fails on fatal startup patterns. Benign noise includes Prisma wolfi→debian warnings and failed sandboxed `migrate diff` (migrations already ran unsandboxed in the entrypoint).
 
+**PgBouncer `server conn crashed?`:** Usually the upstream TCP forwarder resetting idle legs or a container/DB recycle. The unsandboxed pooler now connects **directly** to the DB container IP (`PGBOUNCER_UPSTREAM_DATABASE_URL`), not via `127.0.0.1:5432` forwarder, to reduce spurious resets. Occasional lines with HTTP 200 / healthy remain normal; pooler opens fresh server links automatically.
+
 Upstream requests: LiteLLM sends the phantom key to the localhost reverse proxy; nono injects `Authorization: Bearer sk-...` (or `x-api-key`) before TLS to the real provider.
 
 **Do not** paste provider keys into the Admin UI or enable DB-stored credentials with real keys — they are decrypted inside the sandbox. Use `config.yaml` with `os.environ/OPENAI_API_KEY` and keep `STORE_MODEL_IN_DB=False` unless you extend the design.

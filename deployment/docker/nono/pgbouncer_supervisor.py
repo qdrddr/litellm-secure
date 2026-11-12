@@ -24,9 +24,11 @@ def main() -> int:
         help="Write the loopback DATABASE_URL for workers after the pooler is listening",
     )
     args = parser.parse_args()
-    upstream = os.environ.get("DATABASE_URL")
+    upstream = os.environ.get("PGBOUNCER_UPSTREAM_DATABASE_URL") or os.environ.get(
+        "DATABASE_URL"
+    )
     if not upstream:
-        print("ERROR: DATABASE_URL unset", file=sys.stderr)
+        print("ERROR: PGBOUNCER_UPSTREAM_DATABASE_URL / DATABASE_URL unset", file=sys.stderr)
         return 1
     settings = PgBouncerSettings()
     if not settings.enabled:

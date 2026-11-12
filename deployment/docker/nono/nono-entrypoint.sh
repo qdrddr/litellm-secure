@@ -212,6 +212,7 @@ if [ -n "${DATABASE_URL:-}" ]; then
   DB_HOST="${DATABASE_HOST:-db}"
   DB_PORT="${DATABASE_PORT:-5432}"
   LOCAL_DB_PORT="${NONO_LOCAL_DB_PORT:-5432}"
+  _ORIGINAL_DATABASE_URL="${DATABASE_URL}"
   start_tcp_localhost_forward "db" "${DB_HOST}" "${DB_PORT}" "${LOCAL_DB_PORT}"
   REWRITTEN="$(rewrite_db_url_host "${DATABASE_URL}" "127.0.0.1" "${LOCAL_DB_PORT}")"
   if [ -z "${REWRITTEN}" ]; then
@@ -246,9 +247,15 @@ if pgbouncer_enabled; then
     exit 1
   fi
   rm -f "${POOLED_URL_FILE}"
+  DB_TARGET_IP="$(resolve_host "${DB_HOST}")" || {
+    echo "ERROR: cannot resolve DB host for PgBouncer upstream (${DB_HOST})" >&2
+    exit 1
+  }
+  export PGBOUNCER_UPSTREAM_DATABASE_URL="$(rewrite_db_url_host "${_ORIGINAL_DATABASE_URL}" "${DB_TARGET_IP}" "${DB_PORT}")"
+  POOL_PORT="${LITELLM_PGBOUNCER_PORT:-6432}"
+  echo "pgbouncer: upstream -> ${DB_TARGET_IP}:${DB_PORT} (direct; sandboxed workers use :${POOL_PORT})" >&2
   /app/.venv/bin/python "${PGBOUNCER_SUPERVISOR}" --pooled-url-file "${POOLED_URL_FILE}" &
   PGBOUNCER_SUPERVISOR_PID=$!
-  POOL_PORT="${LITELLM_PGBOUNCER_PORT:-6432}"
   i=0
   while [ "$i" -lt 50 ]; do
     if [ -f "${POOLED_URL_FILE}" ]; then

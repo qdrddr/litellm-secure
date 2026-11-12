@@ -23,6 +23,7 @@ warn_patterns=(
   'Error trying to read Prisma schema file'
   'distro "wolfi"'
   'trusted_proxy_ranges is not set'
+  'server conn crashed'
 )
 
 echo "---- audit: ${LITELLM_CONTAINER} (last 120 lines) ----"
