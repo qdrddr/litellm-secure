@@ -26,6 +26,6 @@
   "network": {
     "network_profile": "developer",
     "listen_port": [4000, 4001, 3000, 51245, 6432],
-    "open_port": [5432, 51245, 18080]
+    "open_port": [5432, 51245, 6432, 18080]
   }
 }

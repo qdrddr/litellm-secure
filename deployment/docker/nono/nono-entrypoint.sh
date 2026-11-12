@@ -8,6 +8,8 @@ STAGE=/app/.staging
 CONFIG_STAGE="${STAGE}/config.yaml"
 DB_FORWARD_PID=""
 CREDENTIAL_FORWARD_PID=""
+PGBOUNCER_SUPERVISOR_PID=""
+POOLED_URL_FILE="${STAGE}/pgbouncer-pooled-database-url"
 
 # nolabs-ai/claude before-hook needs parents present before nono resolves capabilities (HOME=/app).
 _litellm_uid="$(id -u)"
@@ -25,12 +27,20 @@ nono_credential_proxy_enabled() {
   return 1
 }
 
+pgbouncer_enabled() {
+  case "${LITELLM_PGBOUNCER_ENABLED:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac
+  return 1
+}
+
 cleanup() {
   if [ -n "${DB_FORWARD_PID}" ]; then
     kill "${DB_FORWARD_PID}" 2>/dev/null || true
   fi
   if [ -n "${CREDENTIAL_FORWARD_PID}" ]; then
     kill "${CREDENTIAL_FORWARD_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${PGBOUNCER_SUPERVISOR_PID}" ]; then
+    kill "${PGBOUNCER_SUPERVISOR_PID}" 2> /dev/null || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -215,8 +225,10 @@ fi
 if [ -n "${DATABASE_URL:-}" ] && [ -x /app/.venv/bin/python ]; then
   # Unsandboxed DB setup only. Do not call prisma_migration.py here — it also runs
   # `prisma generate`, which chmods site-packages and fails under Landlock / RO venv.
+  # PgBouncer must not start here — it would exit when this process returns.
   LITELLM_MIGRATION_DIR="${LITELLM_MIGRATION_DIR:-/tmp/litellm-migrations}" \
   DISABLE_SCHEMA_UPDATE="${NONO_PREFLIGHT_DISABLE_SCHEMA_UPDATE:-false}" \
+  LITELLM_PGBOUNCER_ENABLED=false \
     /app/.venv/bin/python -c '
 from litellm.proxy.proxy_cli import run_server
 run_server(("--skip_server_startup",), standalone_mode=False)
@@ -225,6 +237,52 @@ run_server(("--skip_server_startup",), standalone_mode=False)
       exit 1
     }
   export DISABLE_SCHEMA_UPDATE=true
+fi
+
+if pgbouncer_enabled; then
+  PGBOUNCER_SUPERVISOR="/usr/local/lib/litellm-secure/pgbouncer_supervisor.py"
+  if [ ! -f "${PGBOUNCER_SUPERVISOR}" ]; then
+    echo "ERROR: ${PGBOUNCER_SUPERVISOR} missing (image too old for in-container PgBouncer)" >&2
+    exit 1
+  fi
+  rm -f "${POOLED_URL_FILE}"
+  /app/.venv/bin/python "${PGBOUNCER_SUPERVISOR}" --pooled-url-file "${POOLED_URL_FILE}" &
+  PGBOUNCER_SUPERVISOR_PID=$!
+  POOL_PORT="${LITELLM_PGBOUNCER_PORT:-6432}"
+  i=0
+  while [ "$i" -lt 50 ]; do
+    if [ -f "${POOLED_URL_FILE}" ]; then
+      if python3 - "${POOL_PORT}" <<'PY'
+import socket, sys
+port = int(sys.argv[1])
+s = socket.socket()
+s.settimeout(0.3)
+try:
+    s.connect(("127.0.0.1", port))
+except OSError:
+    sys.exit(1)
+finally:
+    s.close()
+PY
+      then
+        break
+      fi
+    fi
+    if ! kill -0 "${PGBOUNCER_SUPERVISOR_PID}" 2>/dev/null; then
+      echo "ERROR: PgBouncer supervisor exited during startup" >&2
+      exit 1
+    fi
+    i=$((i + 1))
+    sleep 0.2
+  done
+  if [ "$i" -ge 50 ]; then
+    echo "ERROR: PgBouncer did not become ready on 127.0.0.1:${POOL_PORT}" >&2
+    exit 1
+  fi
+  export DATABASE_URL="$(cat "${POOLED_URL_FILE}")"
+  export LITELLM_PGBOUNCER_POOLED_DATABASE_URL=true
+  export LITELLM_PGBOUNCER_ENABLED=false
+  echo "pgbouncer: workers use loopback :${POOL_PORT} (supervisor pid ${PGBOUNCER_SUPERVISOR_PID})" >&2
 fi
 
 # Bind mounts may not be readable under Landlock; stage config into the image tree first.

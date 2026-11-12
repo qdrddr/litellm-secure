@@ -50,6 +50,8 @@ services:
     command: ["--config", "/app/.staging/config.yaml"]
     volumes:
       - ${LITELLM_CONFIG_PATH:-./config.example.yaml}:/app/config.yaml:ro
+      - ./nono/nono-entrypoint.sh:/usr/local/bin/nono-entrypoint.sh:ro
+      - ./nono/pgbouncer_supervisor.py:/usr/local/lib/litellm-secure/pgbouncer_supervisor.py:ro
     depends_on:
       db:
         condition: service_healthy
