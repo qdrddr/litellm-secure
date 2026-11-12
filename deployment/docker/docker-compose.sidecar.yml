@@ -50,6 +50,6 @@ services:
       NONO_CREDENTIAL_PROXY_HOST: ${NONO_CREDENTIAL_PROXY_HOST:-nono-proxy}
       NONO_CREDENTIAL_PROXY_PORT: ${NONO_CREDENTIAL_PROXY_PORT:-4010}
       NONO_LOCAL_CREDENTIAL_PROXY_PORT: ${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}
-      NONO_CREDENTIALS_PROFILE_PATH: /app/credentials-sidecar-profile.json
+      # Credentials JSON is mount-only for emit-sidecar (not NONO_CREDENTIALS_PROFILE_PATH — nono run would wire routes here).
       NONO_PROFILE: litellm-sandbox
       NONO_PROXY_PASS: ${NONO_PROXY_PASS:?set NONO_PROXY_PASS in .env for sidecar proxy auth}

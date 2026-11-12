@@ -7,6 +7,10 @@
 # Defaults: nono/fixtures/nono_entrypoint.json (override path via NONO_ENTRYPOINT_FIXTURE).
 set -eu
 
+_litellm_nono_mode="Direct"
+case "${NONO_CREDENTIAL_PROXY:-}" in 1|true|yes|TRUE|YES) _litellm_nono_mode="Sidecar" ;; esac
+echo "litellm-secure: ${_litellm_nono_mode} mode" >&2
+
 NONO_ENV_PY="${NONO_ENV_PY:-/usr/local/lib/litellm-secure/litellm_nono_env.py}"
 _FIXTURES_DIR="${LITELLM_FIXTURES_DIR:-/usr/local/lib/litellm-secure/fixtures}"
 EP_FIXTURE="${NONO_ENTRYPOINT_FIXTURE:-${_FIXTURES_DIR}/nono_entrypoint.json}"
@@ -45,6 +49,8 @@ nono_k8s_proxy_enabled() {
 
 start_nono_filter_proxy() {
   PROXY_PORT="${NONO_PROXY_PORT:-${ep_defaults_k8s_filter_proxy_port}}"
+  # --no-auth conflicts with --pass (sidecar sets NONO_PROXY_PASS in the pod).
+  unset NONO_PROXY_PASS
   nono proxy --port "${PROXY_PORT}" --profile "${NONO_PROFILE:-${ep_defaults_nono_profile_k8s_filter}}" --no-auth &
   export HTTP_PROXY="http://127.0.0.1:${PROXY_PORT}"
   export HTTPS_PROXY="${HTTP_PROXY}"
@@ -251,7 +257,6 @@ if nono_credential_proxy_enabled; then
     exit 1
   fi
   cp "${_cred_src}" "${CRED_PROFILE_STAGE}"
-  export NONO_CREDENTIALS_PROFILE_PATH="${CRED_PROFILE_STAGE}"
   case "${NONO_K8S_SIDECAR:-}" in
     1|true|yes|TRUE|YES) _cred_host_default="${ep_defaults_credential_proxy_host_k8s_sidecar}" ;;
     *) _cred_host_default="${ep_defaults_credential_proxy_host_compose}" ;;
@@ -260,7 +265,9 @@ if nono_credential_proxy_enabled; then
   CRED_PROXY_PORT="${NONO_CREDENTIAL_PROXY_PORT:-${ep_defaults_credential_proxy_port}}"
   LOCAL_CRED_PORT="${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-${ep_defaults_local_credential_proxy_port}}"
   start_tcp_localhost_forward "credential-proxy" "${CRED_PROXY_HOST}" "${CRED_PROXY_PORT}" "${LOCAL_CRED_PORT}"
-  eval "$(python3 "${NONO_ENV_PY}" emit-sidecar)"
+  # Scope credentials profile to Python emit only — must not stay in env for `nono run` (would warn on SBX_REAL_*).
+  eval "$(NONO_CREDENTIALS_PROFILE_PATH="${CRED_PROFILE_STAGE}" python3 "${NONO_ENV_PY}" emit-sidecar)"
+  unset NONO_CREDENTIALS_PROFILE_PATH 2>/dev/null || true
   echo "credential-proxy: phantoms from PHANTOM_KEY_* / profile via 127.0.0.1:${LOCAL_CRED_PORT}" >&2
 fi
 
