@@ -2,6 +2,8 @@
 # Baked into bbkudk/litellm-secure: nono-cli wraps LiteLLM proxy (no separate nono sidecar).
 # Docker Desktop / Landlock hosts: `nono run` supervises the process and installs credential
 # reverse-proxy routes (phantom API keys + localhost base URLs).
+# Talos/K8s (Landlock): NONO_K8S_PROXY=1 — skip `nono run`; optional in-container `nono proxy`
+# filters egress; LiteLLM binds :4000 directly (see CLIProxyAPI-secure nono-entrypoint.sh).
 set -eu
 
 STAGE=/app/.staging
@@ -26,6 +28,18 @@ export TMPDIR="${TMPDIR:-/app/.claude/tmp}"
 nono_credential_proxy_enabled() {
   case "${NONO_CREDENTIAL_PROXY:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac
   return 1
+}
+
+nono_k8s_proxy_enabled() {
+  case "${NONO_K8S_PROXY:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac
+  return 1
+}
+
+start_nono_filter_proxy() {
+  PROXY_PORT="${NONO_PROXY_PORT:-18318}"
+  nono proxy --port "${PROXY_PORT}" --profile "${NONO_PROFILE:-litellm-sandbox}" --no-auth &
+  export HTTP_PROXY="http://127.0.0.1:${PROXY_PORT}"
+  export HTTPS_PROXY="${HTTP_PROXY}"
 }
 
 pgbouncer_enabled() {
@@ -328,6 +342,9 @@ for _p in "${NONO_LOCAL_DB_PORT:-5432}" "${NONO_LOCAL_REDIS_PORT:-6379}" \
   _nono_no_proxy="${_nono_no_proxy},127.0.0.1:${_p}"
 done
 export NO_PROXY="${_nono_no_proxy}${NO_PROXY:+,}${NO_PROXY:-}"
+if nono_k8s_proxy_enabled; then
+  export NO_PROXY="${NO_PROXY},10.0.0.0/8,192.168.0.0/16,.svc,.cluster.local"
+fi
 
 if grep -E '^[[:space:]]*api_base:[[:space:]]*https://(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|openrouter\.ai)' \
   "${CONFIG_STAGE}" 2>/dev/null; then
@@ -353,6 +370,23 @@ if [ "$has_config" = false ]; then
 fi
 
 # Do not exec: keep this shell as parent so the unsandboxed db forwarder survives.
+if nono_k8s_proxy_enabled; then
+  if [ -n "${NONO_PROXY_PORT:-}" ]; then
+    start_nono_filter_proxy
+  fi
+  if [ -f /app/docker/prod_entrypoint.sh ]; then
+    sh /app/docker/prod_entrypoint.sh "$@"
+  elif [ -f /app/docker/component_entrypoint.sh ]; then
+    sh /app/docker/component_entrypoint.sh litellm "$@"
+  elif [ -f /app/docker-entrypoint.sh ]; then
+    sh /app/docker-entrypoint.sh proxy "$@"
+  else
+    echo "ERROR: no LiteLLM entrypoint found under /app/docker" >&2
+    exit 1
+  fi
+  exit $?
+fi
+
 # NONO_RUN_ARGS: optional extra nono run flags before "--" (word-split; unset or empty = no extra flags).
 # shellcheck disable=SC2086
 if [ -f /app/docker/prod_entrypoint.sh ]; then

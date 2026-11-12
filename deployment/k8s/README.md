@@ -38,7 +38,9 @@ See [litellm-secure-sidecar.yaml](./litellm-secure-sidecar.yaml) for a minimal s
 
 Works on hosts with working Landlock in Docker/crun (e.g. many Linux worker nodes). Set `SBX_REAL_*` via Secret on the litellm pod, profile `litellm`, **do not** set `NONO_CREDENTIAL_PROXY`.
 
-On Talos or other strict environments where a standalone `nono` image is easier to operate than combined credential injection, prefer **sidecar mode** above — same pattern as [CLIProxyAPI-secure](https://github.com/qdrddr/CLIProxyAPI-secure) (`NONO_K8S_PROXY` there is for **egress** filtering, not credential injection).
+On Talos or other strict environments where a standalone `nono` image is easier to operate than combined credential injection, prefer **sidecar mode** above.
+
+**Talos alignment (CLIProxyAPI-secure):** set `NONO_K8S_PROXY=1` on **litellm-secure** so the proxy binds `:4000` without `nono run` (Landlock cannot bind `0.0.0.0`). Provider keys stay in the **nono-proxy** sidecar; optional `NONO_PROXY_PORT` runs an in-container egress filter (`nono proxy --no-auth`), same idea as cliproxyapi on Talos (`litellm-cliproxyapi` deployment: `NONO_K8S_PROXY=1`, `NONO_PROFILE=claude`, profile ConfigMap mount).
 
 ## Checks
 
