@@ -271,6 +271,14 @@ if nono_credential_proxy_enabled; then
   echo "credential-proxy: phantoms from PHANTOM_KEY_* / profile via 127.0.0.1:${LOCAL_CRED_PORT}" >&2
 fi
 
+if [ -n "${NONO_LOOPBACK_FORWARD_UPSTREAM_HOST:-}" ]; then
+  _lf_up_port="${NONO_LOOPBACK_FORWARD_UPSTREAM_PORT:?NONO_LOOPBACK_FORWARD_UPSTREAM_PORT required with NONO_LOOPBACK_FORWARD_UPSTREAM_HOST}"
+  _lf_local_port="${NONO_LOOPBACK_FORWARD_LOCAL_PORT:?NONO_LOOPBACK_FORWARD_LOCAL_PORT required with NONO_LOOPBACK_FORWARD_UPSTREAM_HOST}"
+  _lf_label="${NONO_LOOPBACK_FORWARD_LABEL:-loopback-forward}"
+  start_tcp_localhost_forward "${_lf_label}" "${NONO_LOOPBACK_FORWARD_UPSTREAM_HOST}" "${_lf_up_port}" "${_lf_local_port}"
+  echo "${_lf_label}: 127.0.0.1:${_lf_local_port} -> ${NONO_LOOPBACK_FORWARD_UPSTREAM_HOST}:${_lf_up_port}" >&2
+fi
+
 if [ -n "${DATABASE_URL:-}" ]; then
   DB_HOST="${NONO_DB_UPSTREAM_HOST:-${DATABASE_HOST:-${ep_defaults_database_host}}}"
   DB_PORT="${DATABASE_PORT:-${ep_defaults_database_port}}"
@@ -396,6 +404,12 @@ _nono_no_proxy="$(python3 "${NONO_ENV_PY}" emit-entrypoint-no-proxy-value "${EP_
 export NO_PROXY="${_nono_no_proxy}${NO_PROXY:+,}${NO_PROXY:-}"
 if nono_k8s_proxy_enabled; then
   export NO_PROXY="${NO_PROXY},${ep_no_proxy_k8s_proxy_append}"
+fi
+if [ -n "${NONO_LOOPBACK_FORWARD_LOCAL_PORT:-}" ]; then
+  case ",${NO_PROXY}," in
+    *",127.0.0.1:${NONO_LOOPBACK_FORWARD_LOCAL_PORT},"*) ;;
+    *) export NO_PROXY="${NO_PROXY},127.0.0.1:${NONO_LOOPBACK_FORWARD_LOCAL_PORT}" ;;
+  esac
 fi
 
 if grep -E "${ep_config_guard_forbidden_direct_api_base_regex}" \
