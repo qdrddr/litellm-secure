@@ -4,26 +4,34 @@
 # reverse-proxy routes (phantom API keys + localhost base URLs).
 # Talos/K8s (Landlock): NONO_K8S_PROXY=1 — skip `nono run`; optional in-container `nono proxy`
 # filters egress; LiteLLM binds :4000 directly (see CLIProxyAPI-secure nono-entrypoint.sh).
+# Defaults: nono/fixtures/nono_entrypoint.json (override path via NONO_ENTRYPOINT_FIXTURE).
 set -eu
 
-STAGE=/app/.staging
-CONFIG_STAGE="${STAGE}/config.yaml"
+NONO_ENV_PY="${NONO_ENV_PY:-/usr/local/lib/litellm-secure/litellm_nono_env.py}"
+_FIXTURES_DIR="${LITELLM_FIXTURES_DIR:-/usr/local/lib/litellm-secure/fixtures}"
+EP_FIXTURE="${NONO_ENTRYPOINT_FIXTURE:-${_FIXTURES_DIR}/nono_entrypoint.json}"
+eval "$(python3 "${NONO_ENV_PY}" emit-entrypoint-vars "${EP_FIXTURE}")"
+
+_ep_list() {
+  python3 "${NONO_ENV_PY}" emit-entrypoint-list "${EP_FIXTURE}" "$1"
+}
+
+STAGE="${ep_paths_stage}"
+CONFIG_STAGE="${STAGE}/${ep_paths_config_stage_name}"
 DB_FORWARD_PID=""
 REDIS_FORWARD_PID=""
 CREDENTIAL_FORWARD_PID=""
 PGBOUNCER_SUPERVISOR_PID=""
-POOLED_URL_FILE="${STAGE}/pgbouncer-pooled-database-url"
+POOLED_URL_FILE="${STAGE}/${ep_paths_pooled_url_basename}"
 
 # nolabs-ai/claude before-hook needs parents present before nono resolves capabilities (HOME=/app).
 _litellm_uid="$(id -u)"
-mkdir -p \
-  "${STAGE}" \
-  /app/.local/state/nono \
-  /app/.local/state/claude/locks \
-  /app/.claude/tmp "/app/.claude/tmp/claude-${_litellm_uid}" \
-  /app/.cache/claude 2>/dev/null || true
-chmod 700 /app/.claude /app/.claude/tmp 2>/dev/null || true
-export TMPDIR="${TMPDIR:-/app/.claude/tmp}"
+for _d in $(_ep_list paths.mkdir); do
+  mkdir -p "${_d}" 2>/dev/null || true
+done
+mkdir -p "${ep_paths_claude_tmp_glob}/claude-${_litellm_uid}" 2>/dev/null || true
+chmod "${ep_defaults_chmod_claude_mode}" /app/.claude "${ep_paths_claude_tmp_glob}" 2>/dev/null || true
+export TMPDIR="${TMPDIR:-${ep_paths_tmpdir_default}}"
 
 nono_credential_proxy_enabled() {
   case "${NONO_CREDENTIAL_PROXY:-}" in 1|true|yes|TRUE|YES) return 0 ;; esac
@@ -36,44 +44,10 @@ nono_k8s_proxy_enabled() {
 }
 
 start_nono_filter_proxy() {
-  PROXY_PORT="${NONO_PROXY_PORT:-18318}"
-  export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  # NONO_PROXY_PASS in the litellm container is for phantoms / sidecar auth — it must not
-  # make `nono proxy` imply --pass (conflicts with --no-auth on nono v0.81).
-  _saved_proxy_pass="${NONO_PROXY_PASS:-}"
-  unset NONO_PROXY_PASS
-  nono proxy --port "${PROXY_PORT}" --profile "${NONO_PROFILE:-litellm-k8s-egress}" --no-auth &
-  _egress_pid=$!
-  unset NONO_PROXY_PASS
-  [ -n "${_saved_proxy_pass}" ] && export NONO_PROXY_PASS="${_saved_proxy_pass}"
-  i=0
-  while [ "$i" -lt 50 ]; do
-    if python3 - "${PROXY_PORT}" <<'PY'
-import socket, sys
-s = socket.socket()
-s.settimeout(0.3)
-try:
-    s.connect(("127.0.0.1", int(sys.argv[1])))
-except OSError:
-    sys.exit(1)
-finally:
-    s.close()
-PY
-    then
-      export HTTP_PROXY="http://127.0.0.1:${PROXY_PORT}"
-      export HTTPS_PROXY="${HTTP_PROXY}"
-      echo "nono egress filter: listening on 127.0.0.1:${PROXY_PORT} (pid ${_egress_pid})" >&2
-      return 0
-    fi
-    if ! kill -0 "${_egress_pid}" 2>/dev/null; then
-      echo "ERROR: nono egress filter exited before becoming ready on :${PROXY_PORT}" >&2
-      return 1
-    fi
-    i=$((i + 1))
-    sleep 0.1
-  done
-  echo "ERROR: nono egress filter on :${PROXY_PORT} did not become ready" >&2
-  return 1
+  PROXY_PORT="${NONO_PROXY_PORT:-${ep_defaults_k8s_filter_proxy_port}}"
+  nono proxy --port "${PROXY_PORT}" --profile "${NONO_PROFILE:-${ep_defaults_nono_profile_k8s_filter}}" --no-auth &
+  export HTTP_PROXY="http://127.0.0.1:${PROXY_PORT}"
+  export HTTPS_PROXY="${HTTP_PROXY}"
 }
 
 pgbouncer_enabled() {
@@ -97,7 +71,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-NONO_ENV_PY="${NONO_ENV_PY:-/usr/local/lib/litellm-secure/litellm_nono_env.py}"
 python3 "${NONO_ENV_PY}" preflight || exit 1
 
 # Rewrite the host (and optional port) in a postgres URL. Keeps user/password/path/query intact.
@@ -150,6 +123,8 @@ start_tcp_localhost_forward() {
   remote_host="$2"
   remote_port="$3"
   listen_port="$4"
+  _fwd_attempts="${ep_timings_tcp_forward_ready_attempts}"
+  _fwd_sleep="${ep_timings_tcp_forward_ready_sleep_sec}"
   target_ip="$(resolve_host "${remote_host}")" || {
     echo "ERROR: cannot resolve ${label} host=${remote_host}" >&2
     exit 1
@@ -204,7 +179,7 @@ PY
   _forward_pid=$!
   # Wait until the listen socket accepts connections.
   i=0
-  while [ "$i" -lt 50 ]; do
+  while [ "$i" -lt "${_fwd_attempts}" ]; do
     if python3 - "${listen_port}" <<'PY'
 import socket, sys
 s = socket.socket()
@@ -220,9 +195,9 @@ PY
       break
     fi
     i=$((i + 1))
-    sleep 0.1
+    sleep "${_fwd_sleep}"
   done
-  if [ "$i" -ge 50 ]; then
+  if [ "$i" -ge "${_fwd_attempts}" ]; then
     echo "ERROR: localhost forwarder (${label}) on :${listen_port} did not become ready" >&2
     exit 1
   fi
@@ -234,15 +209,43 @@ PY
   esac
 }
 
+litellm_entrypoint_path() {
+  for _p in $(_ep_list paths.litellm_entrypoints); do
+    if [ -f "${_p}" ]; then
+      echo "${_p}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+invoke_litellm_entrypoint() {
+  _ep="$1"
+  shift
+  case "${_ep}" in
+    */prod_entrypoint.sh) sh "${_ep}" "$@" ;;
+    */component_entrypoint.sh) sh "${_ep}" litellm "$@" ;;
+    */docker-entrypoint.sh) sh "${_ep}" proxy "$@" ;;
+    *)
+      echo "ERROR: unsupported LiteLLM entrypoint ${_ep}" >&2
+      exit 1
+      ;;
+  esac
+}
+
 if nono_credential_proxy_enabled; then
   CRED_PROFILE_STAGE="${STAGE}/credentials-profile.json"
   _cred_src=""
-  for _p in "${NONO_CREDENTIALS_PROFILE_PATH:-}" /app/credentials-sidecar-profile.json /app/.nono/credentials-profile.json; do
-    if [ -n "${_p}" ] && [ -f "${_p}" ]; then
-      _cred_src="${_p}"
-      break
-    fi
-  done
+  if [ -n "${NONO_CREDENTIALS_PROFILE_PATH:-}" ] && [ -f "${NONO_CREDENTIALS_PROFILE_PATH}" ]; then
+    _cred_src="${NONO_CREDENTIALS_PROFILE_PATH}"
+  else
+    for _p in $(_ep_list paths.credential_profile_candidates); do
+      if [ -f "${_p}" ]; then
+        _cred_src="${_p}"
+        break
+      fi
+    done
+  fi
   if [ -z "${_cred_src}" ]; then
     echo "ERROR: sidecar credentials profile not found — mount litellm-credentials.json on litellm-secure" >&2
     exit 1
@@ -250,21 +253,21 @@ if nono_credential_proxy_enabled; then
   cp "${_cred_src}" "${CRED_PROFILE_STAGE}"
   export NONO_CREDENTIALS_PROFILE_PATH="${CRED_PROFILE_STAGE}"
   case "${NONO_K8S_SIDECAR:-}" in
-    1|true|yes|TRUE|YES) _cred_host_default=127.0.0.1 ;;
-    *) _cred_host_default=nono-proxy ;;
+    1|true|yes|TRUE|YES) _cred_host_default="${ep_defaults_credential_proxy_host_k8s_sidecar}" ;;
+    *) _cred_host_default="${ep_defaults_credential_proxy_host_compose}" ;;
   esac
   CRED_PROXY_HOST="${NONO_CREDENTIAL_PROXY_HOST:-${_cred_host_default}}"
-  CRED_PROXY_PORT="${NONO_CREDENTIAL_PROXY_PORT:-4010}"
-  LOCAL_CRED_PORT="${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}"
+  CRED_PROXY_PORT="${NONO_CREDENTIAL_PROXY_PORT:-${ep_defaults_credential_proxy_port}}"
+  LOCAL_CRED_PORT="${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-${ep_defaults_local_credential_proxy_port}}"
   start_tcp_localhost_forward "credential-proxy" "${CRED_PROXY_HOST}" "${CRED_PROXY_PORT}" "${LOCAL_CRED_PORT}"
   eval "$(python3 "${NONO_ENV_PY}" emit-sidecar)"
   echo "credential-proxy: phantoms from PHANTOM_KEY_* / profile via 127.0.0.1:${LOCAL_CRED_PORT}" >&2
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
-  DB_HOST="${NONO_DB_UPSTREAM_HOST:-${DATABASE_HOST:-db}}"
-  DB_PORT="${DATABASE_PORT:-5432}"
-  LOCAL_DB_PORT="${NONO_LOCAL_DB_PORT:-5432}"
+  DB_HOST="${NONO_DB_UPSTREAM_HOST:-${DATABASE_HOST:-${ep_defaults_database_host}}}"
+  DB_PORT="${DATABASE_PORT:-${ep_defaults_database_port}}"
+  LOCAL_DB_PORT="${NONO_LOCAL_DB_PORT:-${ep_defaults_local_db_port}}"
   _ORIGINAL_DATABASE_URL="${DATABASE_URL}"
   start_tcp_localhost_forward "db" "${DB_HOST}" "${DB_PORT}" "${LOCAL_DB_PORT}"
   REWRITTEN="$(rewrite_db_url_host "${DATABASE_URL}" "127.0.0.1" "${LOCAL_DB_PORT}")"
@@ -279,8 +282,8 @@ if [ -n "${DATABASE_URL:-}" ]; then
 fi
 
 REDIS_UPSTREAM_HOST="${NONO_REDIS_UPSTREAM_HOST:-${REDIS_HOST:-}}"
-REDIS_UPSTREAM_PORT="${NONO_REDIS_UPSTREAM_PORT:-${REDIS_PORT:-6379}}"
-LOCAL_REDIS_PORT="${NONO_LOCAL_REDIS_PORT:-6379}"
+REDIS_UPSTREAM_PORT="${NONO_REDIS_UPSTREAM_PORT:-${REDIS_PORT:-${ep_defaults_redis_port}}}"
+LOCAL_REDIS_PORT="${NONO_LOCAL_REDIS_PORT:-${ep_defaults_local_redis_port}}"
 if [ -n "${REDIS_UPSTREAM_HOST}" ]; then
   start_tcp_localhost_forward "redis" "${REDIS_UPSTREAM_HOST}" "${REDIS_UPSTREAM_PORT}" "${LOCAL_REDIS_PORT}"
   export REDIS_HOST="127.0.0.1"
@@ -292,7 +295,7 @@ if [ -n "${DATABASE_URL:-}" ] && [ -x /app/.venv/bin/python ]; then
   # Unsandboxed DB setup only. Do not call prisma_migration.py here — it also runs
   # `prisma generate`, which chmods site-packages and fails under Landlock / RO venv.
   # PgBouncer must not start here — it would exit when this process returns.
-  LITELLM_MIGRATION_DIR="${LITELLM_MIGRATION_DIR:-/tmp/litellm-migrations}" \
+  LITELLM_MIGRATION_DIR="${LITELLM_MIGRATION_DIR:-${ep_defaults_migration_dir}}" \
   DISABLE_SCHEMA_UPDATE="${NONO_PREFLIGHT_DISABLE_SCHEMA_UPDATE:-false}" \
   LITELLM_PGBOUNCER_ENABLED=false \
     /app/.venv/bin/python -c '
@@ -302,11 +305,11 @@ run_server(("--skip_server_startup",), standalone_mode=False)
       echo "ERROR: database migration failed (unsandboxed via localhost forwarder)" >&2
       exit 1
     }
-  export DISABLE_SCHEMA_UPDATE=true
+  export DISABLE_SCHEMA_UPDATE="${ep_defaults_disable_schema_update_after_migrate}"
 fi
 
 if pgbouncer_enabled; then
-  PGBOUNCER_SUPERVISOR="/usr/local/lib/litellm-secure/pgbouncer_supervisor.py"
+  PGBOUNCER_SUPERVISOR="${ep_paths_pgbouncer_supervisor}"
   if [ ! -f "${PGBOUNCER_SUPERVISOR}" ]; then
     echo "ERROR: ${PGBOUNCER_SUPERVISOR} missing (image too old for in-container PgBouncer)" >&2
     exit 1
@@ -317,12 +320,14 @@ if pgbouncer_enabled; then
     exit 1
   }
   export PGBOUNCER_UPSTREAM_DATABASE_URL="$(rewrite_db_url_host "${_ORIGINAL_DATABASE_URL}" "${DB_TARGET_IP}" "${DB_PORT}")"
-  POOL_PORT="${LITELLM_PGBOUNCER_PORT:-6432}"
+  POOL_PORT="${LITELLM_PGBOUNCER_PORT:-${ep_defaults_pgbouncer_port}}"
+  _pg_attempts="${ep_timings_pgbouncer_ready_attempts}"
+  _pg_sleep="${ep_timings_pgbouncer_ready_sleep_sec}"
   echo "pgbouncer: upstream -> ${DB_TARGET_IP}:${DB_PORT} (direct; sandboxed workers use :${POOL_PORT})" >&2
   /app/.venv/bin/python "${PGBOUNCER_SUPERVISOR}" --pooled-url-file "${POOLED_URL_FILE}" &
   PGBOUNCER_SUPERVISOR_PID=$!
   i=0
-  while [ "$i" -lt 50 ]; do
+  while [ "$i" -lt "${_pg_attempts}" ]; do
     if [ -f "${POOLED_URL_FILE}" ]; then
       if python3 - "${POOL_PORT}" <<'PY'
 import socket, sys
@@ -345,9 +350,9 @@ PY
       exit 1
     fi
     i=$((i + 1))
-    sleep 0.2
+    sleep "${_pg_sleep}"
   done
-  if [ "$i" -ge 50 ]; then
+  if [ "$i" -ge "${_pg_attempts}" ]; then
     echo "ERROR: PgBouncer did not become ready on 127.0.0.1:${POOL_PORT}" >&2
     exit 1
   fi
@@ -358,29 +363,28 @@ PY
 fi
 
 # Bind mounts may not be readable under Landlock; stage config into the image tree first.
-if [ -f /app/config.yaml ]; then
-  cp /app/config.yaml "${CONFIG_STAGE}"
-elif [ -f /app/config.example.yaml ]; then
-  cp /app/config.example.yaml "${CONFIG_STAGE}"
-else
-  echo "ERROR: no config at /app/config.yaml or /app/config.example.yaml" >&2
+_config_src=""
+for _cfg in $(_ep_list paths.config_sources); do
+  if [ -f "${_cfg}" ]; then
+    _config_src="${_cfg}"
+    break
+  fi
+done
+if [ -z "${_config_src}" ]; then
+  echo "ERROR: no config found (see fixture paths.config_sources)" >&2
   exit 1
 fi
+cp "${_config_src}" "${CONFIG_STAGE}"
 export CONFIG_FILE_PATH="${CONFIG_STAGE}"
 
 # Proxy mode: keep loopback DB/Redis/PgBouncer/credential-forward off HTTP_PROXY.
-_nono_no_proxy="127.0.0.1,localhost"
-for _p in "${NONO_LOCAL_DB_PORT:-5432}" "${NONO_LOCAL_REDIS_PORT:-6379}" \
-  "${LITELLM_PGBOUNCER_PORT:-6432}" "${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}" \
-  "${LITELLM_PRISMA_ENGINE_PORT:-51245}"; do
-  _nono_no_proxy="${_nono_no_proxy},127.0.0.1:${_p}"
-done
+_nono_no_proxy="$(python3 "${NONO_ENV_PY}" emit-entrypoint-no-proxy-value "${EP_FIXTURE}")"
 export NO_PROXY="${_nono_no_proxy}${NO_PROXY:+,}${NO_PROXY:-}"
 if nono_k8s_proxy_enabled; then
-  export NO_PROXY="${NO_PROXY},10.0.0.0/8,192.168.0.0/16,.svc,.cluster.local"
+  export NO_PROXY="${NO_PROXY},${ep_no_proxy_k8s_proxy_append}"
 fi
 
-if grep -E '^[[:space:]]*api_base:[[:space:]]*https://(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|openrouter\.ai)' \
+if grep -E "${ep_config_guard_forbidden_direct_api_base_regex}" \
   "${CONFIG_STAGE}" 2>/dev/null; then
   echo "ERROR: config sets a direct provider api_base — remove it so LiteLLM uses nono OPENAI_BASE_URL / ANTHROPIC_BASE_URL." >&2
   exit 1
@@ -388,7 +392,7 @@ fi
 
 # Historical compose alias: `proxy` → litellm CLI (main-stable Hub image layout).
 case "${1:-}" in
-  proxy)
+  "${ep_paths_cli_command_alias}")
     shift
     ;;
 esac
@@ -403,36 +407,42 @@ if [ "$has_config" = false ]; then
   set -- "$@" --config "${CONFIG_STAGE}"
 fi
 
+_LITELLM_EP="$(litellm_entrypoint_path)" || {
+  echo "ERROR: no LiteLLM entrypoint found (see fixture paths.litellm_entrypoints)" >&2
+  exit 1
+}
+
 # Do not exec: keep this shell as parent so the unsandboxed db forwarder survives.
 if nono_k8s_proxy_enabled; then
   if [ -n "${NONO_PROXY_PORT:-}" ]; then
-    start_nono_filter_proxy || echo "WARNING: nono egress filter disabled; provider traffic uses credential sidecar / direct NO_PROXY only" >&2
+    start_nono_filter_proxy
   fi
-  if [ -f /app/docker/prod_entrypoint.sh ]; then
-    sh /app/docker/prod_entrypoint.sh "$@"
-  elif [ -f /app/docker/component_entrypoint.sh ]; then
-    sh /app/docker/component_entrypoint.sh litellm "$@"
-  elif [ -f /app/docker-entrypoint.sh ]; then
-    sh /app/docker-entrypoint.sh proxy "$@"
-  else
-    echo "ERROR: no LiteLLM entrypoint found under /app/docker" >&2
-    exit 1
-  fi
+  invoke_litellm_entrypoint "${_LITELLM_EP}" "$@"
   exit $?
 fi
 
 # NONO_RUN_ARGS: optional extra nono run flags before "--" (word-split; unset or empty = no extra flags).
-# shellcheck disable=SC2086
-if [ -f /app/docker/prod_entrypoint.sh ]; then
-  nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
-    sh /app/docker/prod_entrypoint.sh "$@"
-elif [ -f /app/docker/component_entrypoint.sh ]; then
-  nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
-    sh /app/docker/component_entrypoint.sh litellm "$@"
-elif [ -f /app/docker-entrypoint.sh ]; then
-  nono run --profile "${NONO_PROFILE:-litellm}" ${NONO_RUN_ARGS:-} -- \
-    sh /app/docker-entrypoint.sh proxy "$@"
-else
-  echo "ERROR: no LiteLLM entrypoint found under /app/docker" >&2
-  exit 1
-fi
+_run_nono_litellm() {
+  case "${_LITELLM_EP}" in
+    */prod_entrypoint.sh)
+      # shellcheck disable=SC2086
+      nono run --profile "${NONO_PROFILE:-${ep_defaults_nono_profile}}" ${NONO_RUN_ARGS:-} -- \
+        sh "${_LITELLM_EP}" "$@"
+      ;;
+    */component_entrypoint.sh)
+      # shellcheck disable=SC2086
+      nono run --profile "${NONO_PROFILE:-${ep_defaults_nono_profile}}" ${NONO_RUN_ARGS:-} -- \
+        sh "${_LITELLM_EP}" litellm "$@"
+      ;;
+    */docker-entrypoint.sh)
+      # shellcheck disable=SC2086
+      nono run --profile "${NONO_PROFILE:-${ep_defaults_nono_profile}}" ${NONO_RUN_ARGS:-} -- \
+        sh "${_LITELLM_EP}" proxy "$@"
+      ;;
+    *)
+      echo "ERROR: unsupported LiteLLM entrypoint ${_LITELLM_EP}" >&2
+      exit 1
+      ;;
+  esac
+}
+_run_nono_litellm "$@"

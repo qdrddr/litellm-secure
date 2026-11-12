@@ -320,6 +320,115 @@ def credential_key_env_name(credential_key: str) -> str | None:
     return None
 
 
+def _navigate_fixture(data: dict, dotted: str) -> object:
+    cur: object = data
+    for part in dotted.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            print(f"ERROR: fixture key {dotted!r} not found", file=sys.stderr)
+            sys.exit(1)
+        cur = cur[part]
+    return cur
+
+
+def _flatten_entrypoint_fixture(prefix: str, obj: object, out: dict[str, str]) -> None:
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "meta":
+                continue
+            child = f"{prefix}_{k}" if prefix else k
+            _flatten_entrypoint_fixture(child, v, out)
+    elif isinstance(obj, list):
+        return
+    elif isinstance(obj, (str, int, float, bool)):
+        out[prefix] = str(obj)
+    else:
+        print(f"ERROR: unsupported fixture value at {prefix!r}", file=sys.stderr)
+        sys.exit(1)
+
+
+def emit_entrypoint_vars(fixture_path: str) -> int:
+    """Flatten scalar fixture fields to ep_* shell assignments (safe for eval)."""
+    raw = _read_fixture_json(Path(fixture_path))
+    flat: dict[str, str] = {}
+    _flatten_entrypoint_fixture("ep", raw, flat)
+    for key in sorted(flat):
+        print(f"{key}={shlex.quote(flat[key])}")
+    return 0
+
+
+def emit_entrypoint_list(fixture_path: str, dotted_key: str) -> int:
+    cur = _navigate_fixture(_read_fixture_json(Path(fixture_path)), dotted_key)
+    if not isinstance(cur, list):
+        print(f"ERROR: {dotted_key} must be a list", file=sys.stderr)
+        sys.exit(1)
+    for item in cur:
+        if not isinstance(item, str):
+            print(f"ERROR: invalid list entry in {dotted_key}: {item!r}", file=sys.stderr)
+            sys.exit(1)
+        print(item)
+    return 0
+
+
+def emit_entrypoint_no_proxy_spec(fixture_path: str) -> int:
+    """Print lines: ENV_VAR<space>default_port (for NO_PROXY loopback port suffix)."""
+    raw = _read_fixture_json(Path(fixture_path))
+    block = _navigate_fixture(raw, "no_proxy")
+    if not isinstance(block, dict):
+        print("ERROR: no_proxy must be an object", file=sys.stderr)
+        sys.exit(1)
+    ports = block.get("local_ports")
+    if not isinstance(ports, list) or not ports:
+        print("ERROR: no_proxy.local_ports must be a non-empty array", file=sys.stderr)
+        sys.exit(1)
+    for spec in ports:
+        if not isinstance(spec, dict):
+            print("ERROR: invalid no_proxy.local_ports entry", file=sys.stderr)
+            sys.exit(1)
+        env_var = spec.get("env_var")
+        default = spec.get("default")
+        if not isinstance(env_var, str) or not env_var:
+            print(f"ERROR: invalid env_var in no_proxy.local_ports: {env_var!r}", file=sys.stderr)
+            sys.exit(1)
+        if default is None or default == "":
+            print(f"ERROR: missing default for {env_var}", file=sys.stderr)
+            sys.exit(1)
+        print(f"{env_var} {default}")
+    return 0
+
+
+def emit_entrypoint_no_proxy_value(fixture_path: str) -> int:
+    """Print NO_PROXY loopback prefix + 127.0.0.1:<port> entries (honours container env overrides)."""
+    raw = _read_fixture_json(Path(fixture_path))
+    block = _navigate_fixture(raw, "no_proxy")
+    if not isinstance(block, dict):
+        print("ERROR: no_proxy must be an object", file=sys.stderr)
+        sys.exit(1)
+    prefix = block.get("loopback_prefix")
+    if not isinstance(prefix, str) or not prefix:
+        print("ERROR: no_proxy.loopback_prefix required", file=sys.stderr)
+        sys.exit(1)
+    ports = block.get("local_ports")
+    if not isinstance(ports, list) or not ports:
+        print("ERROR: no_proxy.local_ports must be a non-empty array", file=sys.stderr)
+        sys.exit(1)
+    parts = [prefix]
+    for spec in ports:
+        if not isinstance(spec, dict):
+            print("ERROR: invalid no_proxy.local_ports entry", file=sys.stderr)
+            sys.exit(1)
+        env_var = spec.get("env_var")
+        default = spec.get("default")
+        if not isinstance(env_var, str) or not env_var:
+            print(f"ERROR: invalid env_var in no_proxy.local_ports: {env_var!r}", file=sys.stderr)
+            sys.exit(1)
+        port = os.environ.get(env_var, str(default) if default is not None else "")
+        if not port:
+            port = str(default) if default is not None else ""
+        parts.append(f"127.0.0.1:{port}")
+    print(",".join(parts))
+    return 0
+
+
 def verify_sandboxed_child_env(
     profile_path: str | None = None,
 ) -> int:
@@ -410,7 +519,9 @@ def verify_sandboxed_child_env(
 def main() -> int:
     if len(sys.argv) < 2:
         print(
-            "usage: litellm_nono_env.py preflight|emit-phantoms|emit-sidecar|verify-child",
+            "usage: litellm_nono_env.py preflight|emit-phantoms|emit-sidecar|verify-child|"
+            "emit-entrypoint-vars|emit-entrypoint-list|emit-entrypoint-no-proxy-spec|"
+            "emit-entrypoint-no-proxy-value",
             file=sys.stderr,
         )
         return 2
@@ -428,6 +539,26 @@ def main() -> int:
         emit_phantom_exports()
         emit_sidecar_provider_exports(local_port)
         return 0
+    if cmd == "emit-entrypoint-vars":
+        if len(sys.argv) < 3:
+            print("usage: emit-entrypoint-vars <fixture.json>", file=sys.stderr)
+            return 2
+        return emit_entrypoint_vars(sys.argv[2])
+    if cmd == "emit-entrypoint-list":
+        if len(sys.argv) < 4:
+            print("usage: emit-entrypoint-list <fixture.json> <dotted.key>", file=sys.stderr)
+            return 2
+        return emit_entrypoint_list(sys.argv[2], sys.argv[3])
+    if cmd == "emit-entrypoint-no-proxy-spec":
+        if len(sys.argv) < 3:
+            print("usage: emit-entrypoint-no-proxy-spec <fixture.json>", file=sys.stderr)
+            return 2
+        return emit_entrypoint_no_proxy_spec(sys.argv[2])
+    if cmd == "emit-entrypoint-no-proxy-value":
+        if len(sys.argv) < 3:
+            print("usage: emit-entrypoint-no-proxy-value <fixture.json>", file=sys.stderr)
+            return 2
+        return emit_entrypoint_no_proxy_value(sys.argv[2])
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
 

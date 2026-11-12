@@ -18,7 +18,7 @@ services:
       NONO_PROXY_LISTEN_PORT: ${NONO_PROXY_LISTEN_PORT:-4010}
     volumes:
       - ./nono/profiles/litellm-credentials.json:/profiles/litellm-credentials.json:ro
-      - ./nono/litellm_nono_env.py:/nono/litellm_nono_env.py:ro
+      - ./nono/fixtures/nono_proxy_entrypoint.json:/nono/fixtures/nono_proxy_entrypoint.json:ro
       - ./nono/nono-proxy-entrypoint.sh:/nono/nono-proxy-entrypoint.sh:ro
     ports:
       - "${NONO_PROXY_PUBLISH_PORT:-4010}:${NONO_PROXY_LISTEN_PORT:-4010}"

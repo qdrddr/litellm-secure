@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "description": "Defaults for deployment/docker/nono/nono-entrypoint.sh (overridable via container env)."
+  },
+  "paths": {
+    "stage": "/app/.staging",
+    "config_stage_name": "config.yaml",
+    "pooled_url_basename": "pgbouncer-pooled-database-url",
+    "nono_env_py": "/usr/local/lib/litellm-secure/litellm_nono_env.py",
+    "fixtures_dir": "/usr/local/lib/litellm-secure/fixtures",
+    "entrypoint_fixture_name": "nono_entrypoint.json",
+    "pgbouncer_supervisor": "/usr/local/lib/litellm-secure/pgbouncer_supervisor.py",
+    "tmpdir_default": "/app/.claude/tmp",
+    "claude_tmp_glob": "/app/.claude/tmp",
+    "mkdir": [
+      "/app/.staging",
+      "/app/.local/state/nono",
+      "/app/.local/state/claude/locks",
+      "/app/.claude/tmp",
+      "/app/.cache/claude"
+    ],
+    "credential_profile_candidates": [
+      "/app/credentials-sidecar-profile.json",
+      "/app/.nono/credentials-profile.json"
+    ],
+    "config_sources": [
+      "/app/config.yaml",
+      "/app/config.example.yaml"
+    ],
+    "litellm_entrypoints": [
+      "/app/docker/prod_entrypoint.sh",
+      "/app/docker/component_entrypoint.sh",
+      "/app/docker-entrypoint.sh"
+    ],
+    "cli_command_alias": "proxy"
+  },
+  "defaults": {
+    "nono_profile": "litellm",
+    "nono_profile_k8s_filter": "litellm-sandbox",
+    "database_host": "db",
+    "database_port": "5432",
+    "local_db_port": "5432",
+    "redis_port": "6379",
+    "local_redis_port": "6379",
+    "credential_proxy_host_compose": "nono-proxy",
+    "credential_proxy_host_k8s_sidecar": "127.0.0.1",
+    "credential_proxy_port": "4010",
+    "local_credential_proxy_port": "18080",
+    "pgbouncer_port": "6432",
+    "prisma_engine_port": "51245",
+    "k8s_filter_proxy_port": "18318",
+    "migration_dir": "/tmp/litellm-migrations",
+    "disable_schema_update_after_migrate": "true",
+    "chmod_claude_mode": "700"
+  },
+  "timings": {
+    "tcp_forward_ready_attempts": "50",
+    "tcp_forward_ready_sleep_sec": "0.1",
+    "pgbouncer_ready_attempts": "50",
+    "pgbouncer_ready_sleep_sec": "0.2"
+  },
+  "no_proxy": {
+    "loopback_prefix": "127.0.0.1,localhost",
+    "local_ports": [
+      {"env_var": "NONO_LOCAL_DB_PORT", "default": "5432"},
+      {"env_var": "NONO_LOCAL_REDIS_PORT", "default": "6379"},
+      {"env_var": "LITELLM_PGBOUNCER_PORT", "default": "6432"},
+      {"env_var": "NONO_LOCAL_CREDENTIAL_PROXY_PORT", "default": "18080"},
+      {"env_var": "LITELLM_PRISMA_ENGINE_PORT", "default": "51245"}
+    ],
+    "k8s_proxy_append": "10.0.0.0/8,192.168.0.0/16,.svc,.cluster.local"
+  },
+  "config_guard": {
+    "forbidden_direct_api_base_regex": "^[[:space:]]*api_base:[[:space:]]*https://(api\\.openai\\.com|api\\.anthropic\\.com|generativelanguage\\.googleapis\\.com|openrouter\\.ai)"
+  }
+}

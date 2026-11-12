@@ -1,0 +1,12 @@
+{
+  "meta": {
+    "description": "Defaults for deployment/docker/nono/nono-proxy-entrypoint.sh"
+  },
+  "defaults": {
+    "proxy_home": "/tmp",
+    "proxy_state_subdir": ".local/state/nono",
+    "listen_address": "0.0.0.0",
+    "listen_port": "4010",
+    "credentials_profile": "/profiles/litellm-credentials.json"
+  }
+}
