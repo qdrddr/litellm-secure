@@ -37,9 +37,43 @@ nono_k8s_proxy_enabled() {
 
 start_nono_filter_proxy() {
   PROXY_PORT="${NONO_PROXY_PORT:-18318}"
-  nono proxy --port "${PROXY_PORT}" --profile "${NONO_PROFILE:-litellm-sandbox}" --no-auth &
-  export HTTP_PROXY="http://127.0.0.1:${PROXY_PORT}"
-  export HTTPS_PROXY="${HTTP_PROXY}"
+  export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  # NONO_PROXY_PASS in the litellm container is for phantoms / sidecar auth — it must not
+  # make `nono proxy` imply --pass (conflicts with --no-auth on nono v0.81).
+  _saved_proxy_pass="${NONO_PROXY_PASS:-}"
+  unset NONO_PROXY_PASS
+  nono proxy --port "${PROXY_PORT}" --profile "${NONO_PROFILE:-litellm-k8s-egress}" --no-auth &
+  _egress_pid=$!
+  unset NONO_PROXY_PASS
+  [ -n "${_saved_proxy_pass}" ] && export NONO_PROXY_PASS="${_saved_proxy_pass}"
+  i=0
+  while [ "$i" -lt 50 ]; do
+    if python3 - "${PROXY_PORT}" <<'PY'
+import socket, sys
+s = socket.socket()
+s.settimeout(0.3)
+try:
+    s.connect(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    sys.exit(1)
+finally:
+    s.close()
+PY
+    then
+      export HTTP_PROXY="http://127.0.0.1:${PROXY_PORT}"
+      export HTTPS_PROXY="${HTTP_PROXY}"
+      echo "nono egress filter: listening on 127.0.0.1:${PROXY_PORT} (pid ${_egress_pid})" >&2
+      return 0
+    fi
+    if ! kill -0 "${_egress_pid}" 2>/dev/null; then
+      echo "ERROR: nono egress filter exited before becoming ready on :${PROXY_PORT}" >&2
+      return 1
+    fi
+    i=$((i + 1))
+    sleep 0.1
+  done
+  echo "ERROR: nono egress filter on :${PROXY_PORT} did not become ready" >&2
+  return 1
 }
 
 pgbouncer_enabled() {
@@ -372,7 +406,7 @@ fi
 # Do not exec: keep this shell as parent so the unsandboxed db forwarder survives.
 if nono_k8s_proxy_enabled; then
   if [ -n "${NONO_PROXY_PORT:-}" ]; then
-    start_nono_filter_proxy
+    start_nono_filter_proxy || echo "WARNING: nono egress filter disabled; provider traffic uses credential sidecar / direct NO_PROXY only" >&2
   fi
   if [ -f /app/docker/prod_entrypoint.sh ]; then
     sh /app/docker/prod_entrypoint.sh "$@"
