@@ -7,13 +7,18 @@
   },
   "filesystem": {
     "allow": [
-      "/app",
+      "/app/.staging",
+      "/app/.cache",
+      "/app/.config",
+      "/app/.venv",
+      "/app/litellm",
+      "/app/docker",
       "/tmp",
       "/var/lib/litellm",
       "/var/run/litellm",
       "/run/litellm",
       "/opt/prisma",
-      "/app/.staging"
+      "/app/.nono"
     ]
   },
   "network": {
