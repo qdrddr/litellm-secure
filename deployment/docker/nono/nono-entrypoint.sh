@@ -7,6 +7,7 @@ set -eu
 STAGE=/app/.staging
 CONFIG_STAGE="${STAGE}/config.yaml"
 DB_FORWARD_PID=""
+REDIS_FORWARD_PID=""
 CREDENTIAL_FORWARD_PID=""
 PGBOUNCER_SUPERVISOR_PID=""
 POOLED_URL_FILE="${STAGE}/pgbouncer-pooled-database-url"
@@ -35,6 +36,9 @@ pgbouncer_enabled() {
 cleanup() {
   if [ -n "${DB_FORWARD_PID}" ]; then
     kill "${DB_FORWARD_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${REDIS_FORWARD_PID}" ]; then
+    kill "${REDIS_FORWARD_PID}" 2>/dev/null || true
   fi
   if [ -n "${CREDENTIAL_FORWARD_PID}" ]; then
     kill "${CREDENTIAL_FORWARD_PID}" 2>/dev/null || true
@@ -177,6 +181,7 @@ PY
   echo "${label}-forward: 127.0.0.1:${listen_port} -> ${remote_host}:${remote_port}" >&2
   case "${label}" in
     db) DB_FORWARD_PID="${_forward_pid}" ;;
+    redis) REDIS_FORWARD_PID="${_forward_pid}" ;;
     credential-proxy) CREDENTIAL_FORWARD_PID="${_forward_pid}" ;;
   esac
 }
@@ -209,7 +214,7 @@ if nono_credential_proxy_enabled; then
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
-  DB_HOST="${DATABASE_HOST:-db}"
+  DB_HOST="${NONO_DB_UPSTREAM_HOST:-${DATABASE_HOST:-db}}"
   DB_PORT="${DATABASE_PORT:-5432}"
   LOCAL_DB_PORT="${NONO_LOCAL_DB_PORT:-5432}"
   _ORIGINAL_DATABASE_URL="${DATABASE_URL}"
@@ -220,7 +225,19 @@ if [ -n "${DATABASE_URL:-}" ]; then
     exit 1
   fi
   export DATABASE_URL="${REWRITTEN}"
+  export DATABASE_HOST="127.0.0.1"
+  export DATABASE_PORT="${LOCAL_DB_PORT}"
   echo "DATABASE_URL host remapped to 127.0.0.1:${LOCAL_DB_PORT} (nono open_port)" >&2
+fi
+
+REDIS_UPSTREAM_HOST="${NONO_REDIS_UPSTREAM_HOST:-${REDIS_HOST:-}}"
+REDIS_UPSTREAM_PORT="${NONO_REDIS_UPSTREAM_PORT:-${REDIS_PORT:-6379}}"
+LOCAL_REDIS_PORT="${NONO_LOCAL_REDIS_PORT:-6379}"
+if [ -n "${REDIS_UPSTREAM_HOST}" ]; then
+  start_tcp_localhost_forward "redis" "${REDIS_UPSTREAM_HOST}" "${REDIS_UPSTREAM_PORT}" "${LOCAL_REDIS_PORT}"
+  export REDIS_HOST="127.0.0.1"
+  export REDIS_PORT="${LOCAL_REDIS_PORT}"
+  echo "REDIS remapped to 127.0.0.1:${LOCAL_REDIS_PORT} (nono open_port)" >&2
 fi
 
 if [ -n "${DATABASE_URL:-}" ] && [ -x /app/.venv/bin/python ]; then
@@ -301,6 +318,7 @@ else
   echo "ERROR: no config at /app/config.yaml or /app/config.example.yaml" >&2
   exit 1
 fi
+export CONFIG_FILE_PATH="${CONFIG_STAGE}"
 
 if grep -E '^[[:space:]]*api_base:[[:space:]]*https://(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|openrouter\.ai)' \
   "${CONFIG_STAGE}" 2>/dev/null; then
