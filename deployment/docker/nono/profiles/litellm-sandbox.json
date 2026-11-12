@@ -30,7 +30,8 @@
   },
   "network": {
     "network_profile": "developer",
-    "listen_port": [4000, 4001, 3000, 51245],
+    "no_proxy": ["127.0.0.1", "localhost"],
+    "listen_port": [4000, 4001, 3000, 51245, 6379, 6432],
     "open_port": [5432, 51245, 6432, 18080, 6379]
   }
 }

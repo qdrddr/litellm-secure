@@ -320,6 +320,15 @@ else
 fi
 export CONFIG_FILE_PATH="${CONFIG_STAGE}"
 
+# Proxy mode: keep loopback DB/Redis/PgBouncer/credential-forward off HTTP_PROXY.
+_nono_no_proxy="127.0.0.1,localhost"
+for _p in "${NONO_LOCAL_DB_PORT:-5432}" "${NONO_LOCAL_REDIS_PORT:-6379}" \
+  "${LITELLM_PGBOUNCER_PORT:-6432}" "${NONO_LOCAL_CREDENTIAL_PROXY_PORT:-18080}" \
+  "${LITELLM_PRISMA_ENGINE_PORT:-51245}"; do
+  _nono_no_proxy="${_nono_no_proxy},127.0.0.1:${_p}"
+done
+export NO_PROXY="${_nono_no_proxy}${NO_PROXY:+,}${NO_PROXY:-}"
+
 if grep -E '^[[:space:]]*api_base:[[:space:]]*https://(api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis\.com|openrouter\.ai)' \
   "${CONFIG_STAGE}" 2>/dev/null; then
   echo "ERROR: config sets a direct provider api_base — remove it so LiteLLM uses nono OPENAI_BASE_URL / ANTHROPIC_BASE_URL." >&2
