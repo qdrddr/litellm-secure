@@ -29,4 +29,28 @@ def _install_prisma_port_pin() -> None:
     prisma_engine_utils.get_open_port = lambda: port  # type: ignore[assignment]
 
 
+def _install_redis_loopback_inet() -> None:
+    """Prefer IPv4 when Redis targets loopback (TCP forward from nono entrypoint)."""
+    try:
+        import socket
+
+        import redis.asyncio.connection as redis_async_conn
+    except Exception:
+        return
+
+    _orig_connect = redis_async_conn.Connection._connect
+
+    async def _connect_ipv4_first(self):  # type: ignore[no-untyped-def]
+        host = getattr(self, "host", None) or ""
+        if host in ("127.0.0.1", "localhost"):
+            kwargs = getattr(self, "_connection_arguments", None)
+            if callable(kwargs):
+                args = kwargs()
+                args.setdefault("family", socket.AF_INET)
+        return await _orig_connect(self)
+
+    redis_async_conn.Connection._connect = _connect_ipv4_first  # type: ignore[method-assign]
+
+
 _install_prisma_port_pin()
+_install_redis_loopback_inet()
