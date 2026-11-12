@@ -2,7 +2,7 @@
 
 Docker overlay that runs [LiteLLM](https://github.com/BerriAI/litellm) (no_root) under [nono](https://nono.sh) sandbox and with **proxy credential injection**. Real provider API keys stay outside the sandboxed LiteLLM — phantom tokens and loopback base URLs only.
 
-Pattern follows [CLIProxyAPI-secure](https://github.com/qdrddr/CLIProxyAPI-secure) and nono [`custom_credentials`](https://nono.sh/docs/cli/features/credential-injection).
+Credential injection uses nono [`custom_credentials`](https://nono.sh/docs/cli/features/credential-injection).
 
 ## Two deployment modes
 

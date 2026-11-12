@@ -3,7 +3,7 @@
 # Docker Desktop / Landlock hosts: `nono run` supervises the process and installs credential
 # reverse-proxy routes (phantom API keys + localhost base URLs).
 # Talos/K8s (Landlock): NONO_K8S_PROXY=1 — skip `nono run`; optional in-container `nono proxy`
-# filters egress; LiteLLM binds :4000 directly (see CLIProxyAPI-secure nono-entrypoint.sh).
+# filters egress; LiteLLM binds :4000 directly (see deployment/k8s/README.md).
 # Defaults: nono/fixtures/nono_entrypoint.json (override path via NONO_ENTRYPOINT_FIXTURE).
 set -eu
 
