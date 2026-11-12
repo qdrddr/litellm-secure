@@ -9,7 +9,7 @@
     "allow": [
       "/app/.staging",
       "/app/.cache",
-      "/app/.config",
+      "/app/.config/nono",
       "/app/.venv",
       "/app/litellm",
       "/app/docker",
