@@ -33,12 +33,14 @@ RUN set -eux; \
     apk del wget || true; \
     rm -rf /var/cache/apk/*
 
-ENV HOME=/root
+# Match ghcr.io/berriai/litellm-non_root runtime user (nobody / 65534, HOME=/app).
+ARG LITELLM_RUNTIME_UID=65534
+ARG LITELLM_RUNTIME_GID=65534
 
-RUN mkdir -p /root/.config/nono/profiles \
-  && nono pull nolabs-ai/claude
+RUN mkdir -p /app/.config/nono/profiles /app/.nono \
+  && HOME=/app nono pull nolabs-ai/claude
 
-COPY nono/profiles/litellm.json /root/.config/nono/profiles/litellm.json
+COPY nono/profiles/litellm.json /app/.config/nono/profiles/litellm.json
 COPY config.example.yaml /app/config.example.yaml
 COPY nono/nono-entrypoint.sh /usr/local/bin/nono-entrypoint.sh
 RUN mkdir -p /usr/local/lib/litellm-secure /app/.nono
@@ -48,7 +50,9 @@ COPY nono/sitecustomize/sitecustomize.py /tmp/litellm-secure-sitecustomize.py
 RUN chmod +x /usr/local/bin/nono-entrypoint.sh \
   && SITE="$(/app/.venv/bin/python -c 'import site; print(site.getsitepackages()[0])')" \
   && install -m 0644 /tmp/litellm-secure-sitecustomize.py "${SITE}/sitecustomize.py" \
-  && rm -f /tmp/litellm-secure-sitecustomize.py
+  && rm -f /tmp/litellm-secure-sitecustomize.py \
+  && chown -R "${LITELLM_RUNTIME_UID}:${LITELLM_RUNTIME_GID}" \
+    /app/.config/nono /app/.nono /usr/local/lib/litellm-secure
 
 # Pin Prisma query-engine port (sitecustomize.py + nono listen_port/open_port 51245).
 ENV LITELLM_PRISMA_ENGINE_PORT=51245
@@ -57,7 +61,9 @@ WORKDIR /app
 
 EXPOSE 4000/tcp
 
-USER root
+# USER must be numeric: ghcr.io/berriai/litellm-non_root uses 65534 (nobody).
+USER 65534:65534
+ENV HOME=/app
 
 ENTRYPOINT ["/usr/local/bin/nono-entrypoint.sh"]
 CMD ["litellm"]

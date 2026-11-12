@@ -9,4 +9,4 @@ services:
       NONO_PROFILE: ${NONO_PROFILE:-litellm}
       NONO_RUN_ARGS: ${NONO_RUN_ARGS:-}
     volumes:
-      - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/root/.config/nono/profiles/litellm.json:ro
+      - ${NONO_PROFILE_PATH:-./nono/profiles/litellm.json}:/app/.config/nono/profiles/litellm.json:ro

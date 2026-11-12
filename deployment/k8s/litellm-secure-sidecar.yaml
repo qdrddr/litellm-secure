@@ -124,7 +124,7 @@ spec:
               value: "False"
           volumeMounts:
             - name: sandbox-profile
-              mountPath: /root/.config/nono/profiles/litellm-sandbox.json
+              mountPath: /app/.config/nono/profiles/litellm-sandbox.json
               subPath: litellm-sandbox.json
               readOnly: true
           securityContext:

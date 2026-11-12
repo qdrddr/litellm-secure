@@ -86,7 +86,7 @@ Credential injection requires `nono run` with Landlock (Docker Desktop on macOS,
 
 ## Files
 
-- `Dockerfile.template` — nono overlay on `ghcr.io/berriai/litellm-non_root` (semver from canonical git tag)
+- `Dockerfile.template` — nono overlay on `ghcr.io/berriai/litellm-non_root` (runtime user `65534` / `HOME=/app`, same as base)
 - `nono/nono-entrypoint.sh` — stage config, `exec nono run`
 - `nono/profiles/litellm.json` — filesystem allowlist + `custom_credentials` for OpenAI / Anthropic / Gemini
 - `config.example.yaml` — models referencing `os.environ/*` phantoms
