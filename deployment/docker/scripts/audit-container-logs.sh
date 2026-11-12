@@ -15,6 +15,9 @@ fail_patterns=(
   'Database migration cannot proceed'
   'Database setup failed'
   'Command exited with code 1'
+  'Connection reset by peer'
+  'OpenrouterException'
+  'litellm.APIConnectionError'
 )
 
 warn_patterns=(
